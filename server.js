@@ -8,10 +8,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Wichtig für Cloud-Hoster wie Render (Reverse Proxy)
+// Wichtig für Render (Reverse Proxy)
 app.set('trust proxy', 1);
 
-const HOST_URL = process.env.RENDER_EXTERNAL_URL || process.env.HOST_URL || `http://localhost:${PORT}`;
+// Feste Live-URL, damit Steam-Return und Realm zu 100% übereinstimmen
+const HOST_URL = process.env.RENDER_EXTERNAL_URL || 'https://steam-backend-88lk.onrender.com';
 const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
 const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || '';
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || '';
@@ -21,11 +22,14 @@ app.use(express.text({ type: 'text/plain', limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
-    secret: 'geheimer_schluessel_hier_123',
+    secret: 'steam_app_super_secret_key_99',
     resave: false,
     saveUninitialized: false,
     proxy: true,
-    cookie: { secure: 'auto', sameSite: 'lax' }
+    cookie: { 
+        secure: true, 
+        sameSite: 'lax' 
+    }
 }));
 
 app.use(passport.initialize());
@@ -34,7 +38,7 @@ app.use(passport.session());
 // Statische Dateien ausliefern
 app.use(express.static(__dirname));
 
-// Passport Steam Setup (nur wenn API Key da ist)
+// Passport Steam Setup
 if (STEAM_API_KEY) {
     passport.use(new SteamStrategy({
         returnURL: `${HOST_URL}/auth/steam/return`,
@@ -136,7 +140,7 @@ app.post('/api/igdb', async (req, res) => {
         if (bodyData.query) {
             query = bodyData.query;
         } else if (typeof req.body === 'string' && req.body.trim().startsWith('fields')) {
-            query = req.body;
+            query = query;
         }
 
         const igdbRes = await axios.post('https://api.igdb.com/v4/games', query, {
