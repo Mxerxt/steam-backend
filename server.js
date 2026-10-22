@@ -3,14 +3,22 @@ const session = require('express-session');
 const passport = require('passport');
 const SteamStrategy = require('passport-steam').Strategy;
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// WICHTIG: Ersetze dies später durch deine echte Server-URL (z.B. von Render/Railway) oder deine Domain
-const HOST_URL = process.env.HOST_URL || `http://localhost:${PORT}`;
-// Deinen kostenlosen Steam Web API Key trägst du hier ein (bekommst du auf https://steamcommunity.com/dev/apikey)
-const STEAM_API_KEY = process.env.STEAM_API_KEY || 'DEIN_STEAM_API_KEY_HIER';
+const HOST_URL = process.env.RENDER_EXTERNAL_URL || process.env.HOST_URL || `http://localhost:${PORT}`;
+const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || '';
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || '';
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.text({ type: 'text/plain', limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Statische Dateien (wie index.html) direkt vom Server ausliefern
+app.use(express.static(__dirname));
 
 // Passport Steam Setup
 passport.use(new SteamStrategy({
@@ -25,7 +33,7 @@ passport.use(new SteamStrategy({
 ));
 
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+passport.deserializeUser((obj, done) => done(obj));
 
 app.use(session({ secret: 'geheimer_schluessel_hier', resave: false, saveUninitialized: true }));
 app.use(passport.initialize());
@@ -34,11 +42,10 @@ app.use(passport.session());
 // 1. Steam Login Route
 app.get('/auth/steam', passport.authenticate('steam', { failureRedirect: '/' }));
 
-// 2. Steam Callback Route (Nach erfolgreichem Login)
+// 2. Steam Callback Route
 app.get('/auth/steam/return', 
   passport.authenticate('steam', { failureRedirect: '/' }),
   (req, res) => {
-    // Nach erfolgreichem Login leiten wir den Nutzer zurück zu unserer Web-App mit seiner SteamID
     res.redirect(`/?steamid=${req.user.id}&name=${encodeURIComponent(req.user.displayName)}`);
   }
 );
@@ -51,18 +58,79 @@ app.get('/api/user', (req, res) => {
   res.json({ loggedIn: true, user: req.user });
 });
 
-// 4. API-Route: Originale Steam-Erfolge für ein Spiel abrufen
+// 4. API-Route: Originale Steam-Erfolge
 app.get('/api/achievements', async (req, res) => {
   const { steamid, appid } = req.query;
   if (!steamid || !appid) {
     return res.status(400).json({ error: 'steamid und appid werden benötigt' });
   }
-
   try {
     const response = await axios.get(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${appid}&key=${STEAM_API_KEY}&steamid=${steamid}`);
     res.json(response.data);
   } catch (error) {
-    res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge (Profil evtl. privat oder falsche AppID)' });
+    res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge' });
+  }
+});
+
+// 5. API-Route: IGDB & Twitch Proxy
+app.post('/api/igdb', async (req, res) => {
+  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'Twitch API Credentials sind auf dem Server nicht konfiguriert.' });
+  }
+
+  try {
+    const tokenRes = await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${TWITCH_CLIENT_ID}&client_secret=${TWITCH_CLIENT_SECRET}&grant_type=client_credentials`);
+    const accessToken = tokenRes.data.access_token;
+
+    let bodyData = {};
+    if (typeof req.body === 'string') {
+      try { bodyData = JSON.parse(req.body); } catch (e) { bodyData = { query: req.body }; }
+    } else {
+      bodyData = req.body || {};
+    }
+
+    if (bodyData.action === 'twitch_viewers') {
+      const gameName = bodyData.gameName;
+      if (!gameName) return res.json({ viewers: 0, streams: 0 });
+
+      const gameRes = await axios.get(`https://api.twitch.tv/helix/games?name=${encodeURIComponent(gameName)}`, {
+        headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` }
+      });
+      if (!gameRes.data.data || gameRes.data.data.length === 0) {
+        return res.json({ viewers: 0, streams: 0 });
+      }
+      const twitchGameId = gameRes.data.data[0].id;
+      const streamsRes = await axios.get(`https://api.twitch.tv/helix/streams?game_id=${twitchGameId}&first=100`, {
+        headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` }
+      });
+      let totalViewers = 0;
+      let activeStreams = 0;
+      if (streamsRes.data.data) {
+        activeStreams = streamsRes.data.data.length;
+        totalViewers = streamsRes.data.data.reduce((sum, s) => sum + s.viewer_count, 0);
+      }
+      return res.json({ viewers: totalViewers, streams: activeStreams });
+    }
+
+    let query = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 20;';
+    if (bodyData.query) {
+      query = bodyData.query;
+    } else if (typeof req.body === 'string' && req.body.trim().startsWith('fields')) {
+      query = req.body;
+    }
+
+    const igdbRes = await axios.post('https://api.igdb.com/v4/games', query, {
+      headers: {
+        'Client-ID': TWITCH_CLIENT_ID,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'text/plain',
+      }
+    });
+
+    res.json(igdbRes.data);
+  } catch (error) {
+    console.error('IGDB Error:', error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
