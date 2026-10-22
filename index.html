@@ -18,17 +18,45 @@
         h1 { font-size: 22px; margin-bottom: 5px; text-align: center; }
         .subtitle { font-size: 11px; color: #aaa; text-align: center; margin-bottom: 15px; }
 
-        /* Steam Login Box */
-        .steam-auth-box { 
+        /* Lokales Login-System */
+        .auth-box { 
             background: #1e1e1e; 
             padding: 10px 15px; 
             border-radius: 8px; 
-            text-align: center; 
             margin-bottom: 15px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
             border: 1px solid #333; 
+            gap: 10px;
+        }
+        .auth-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #121212;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            outline: none;
+        }
+        .auth-input:focus { border-color: #4da6ff; }
+        .auth-btn {
+            background: #2ea44f;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .auth-btn:active { transform: scale(0.95); }
+        .auth-btn.logout {
+            background: #333;
+            border: 1px solid #555;
+            color: #aaa;
         }
 
         /* Navigation Tabs */
@@ -49,7 +77,7 @@
         .tab-btn.active { background: #2b4c7e; color: #fff; border-color: #4da6ff; }
 
         .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
-        input[type="text"] { 
+        input[type="text"].search-input { 
             width: 100%; 
             padding: 12px; 
             background: #1e1e1e; 
@@ -267,10 +295,9 @@
     <h1>🎮 Spiele-Datenbank</h1>
     <div class="subtitle">Alle Spiele, MMOs & Abo-Titel</div>
 
-    <!-- STEAM LOGIN BEREICH -->
-    <div class="steam-auth-box">
-        <div id="steam-user-info" style="font-size: 13px; color: #aaa;">Nicht bei Steam angemeldet</div>
-        <a id="steam-login-btn" href="https://steam-backend-88lk.onrender.com/auth/steam" style="background: #171a21; color: #fff; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; border: 1px solid #666;">🎮 Steam Login</a>
+    <!-- LOKALER LOGIN BEREICH (ersetzt den Steam-Login) -->
+    <div id="auth-box-container" class="auth-box">
+        <!-- Wird per JavaScript generiert -->
     </div>
 
     <div class="nav-tabs">
@@ -284,9 +311,9 @@
     <div id="viewCatalog" class="view">
         <button class="btn-random" onclick="openRandomGame()">🎲 Zufälliges Spiel entdecken</button>
         <div class="controls">
-            <input type="text" id="searchInput" placeholder="🔍 Nach Spiel suchen..." oninput="searchGames()">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Nach Spiel suchen..." oninput="searchGames()">
         </div>
-        <h3 style="font-size: 16px; margin-bottom: 10px; color: #4da6ff;" id="catalog-title">🎮 Maßgeschneidert für dich</h3>
+        <h3 style="font-size: 16px; margin-bottom: 10px; color: #4da6ff; display: none;" id="catalog-title">🎮 Maßgeschneidert für dich</h3>
         <div id="game-list">
             <div class="loading-spinner">Lade Katalog...</div>
         </div>
@@ -336,6 +363,41 @@
         let previousView = 'top10';
         let currentGameDetail = null;
 
+        // AUTHENTIFIZIERUNG: NEUES LOKALES SYSTEM
+        function renderAuthUI() {
+            const container = document.getElementById('auth-box-container');
+            const savedName = localStorage.getItem('app_local_username');
+
+            if (savedName) {
+                container.innerHTML = `
+                    <div style="font-size: 13px;">Hallo <strong style="color: #4da6ff;">${savedName}</strong>! 👋</div>
+                    <button class="auth-btn logout" onclick="logoutLocal()">Abmelden</button>
+                `;
+            } else {
+                container.innerHTML = `
+                    <input type="text" id="username-input" class="auth-input" placeholder="Dein Profilname..." onkeydown="if(event.key==='Enter') loginLocal()">
+                    <button class="auth-btn" onclick="loginLocal()">Anmelden</button>
+                `;
+            }
+        }
+
+        function loginLocal() {
+            const nameInput = document.getElementById('username-input');
+            const newName = nameInput.value.trim();
+            if (newName !== '') {
+                localStorage.setItem('app_local_username', newName);
+                renderAuthUI();
+            }
+        }
+
+        function logoutLocal() {
+            if(confirm("Möchtest du dich wirklich abmelden? Deine Daten (Favoriten etc.) bleiben aber erhalten!")) {
+                localStorage.removeItem('app_local_username');
+                renderAuthUI();
+            }
+        }
+
+        // Cache Funktionen
         function cacheGame(game) {
             if (game && game.id) {
                 gameCache[game.id] = game;
@@ -354,47 +416,27 @@
 
         async function initApp() {
             try {
-                // Steam Login Parameter auswerten
-                const urlParams = new URLSearchParams(window.location.search);
-                const steamIdParam = urlParams.get('steamid');
-                const steamNameParam = urlParams.get('name');
+                // 1. Lokales Auth-UI direkt anzeigen
+                renderAuthUI();
 
-                if (steamIdParam) {
-                    localStorage.setItem('steam_id', steamIdParam);
-                    localStorage.setItem('steam_name', steamNameParam);
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-
-                const savedSteamId = localStorage.getItem('steam_id');
-                const savedSteamName = localStorage.getItem('steam_name');
-
-                if (savedSteamId) {
-                    document.getElementById('steam-user-info').innerHTML = `Eingeloggt: <strong style="color: #4da6ff;">${savedSteamName}</strong>`;
-                    const loginBtn = document.getElementById('steam-login-btn');
-                    loginBtn.textContent = 'Abmelden';
-                    loginBtn.href = '#';
-                    loginBtn.onclick = (e) => {
-                        e.preventDefault();
-                        localStorage.removeItem('steam_id');
-                        localStorage.removeItem('steam_name');
-                        location.reload();
-                    };
-                }
-
+                // 2. Statistiken updaten
                 updateFavCount();
                 updatePlayedCount();
 
+                // 3. Prüfen, ob Onboarding nötig ist
                 if (!userPreferences) {
                     await loadOnboardingPool();
-                    return;
+                    return; // Stoppt hier, bis Onboarding fertig ist
                 }
+                
+                // 4. Wenn Onboarding fertig, Hauptdaten laden
                 await loadMainData();
 
                 const savedTab = localStorage.getItem('igdb_active_tab') || 'top10';
                 switchTab(savedTab);
             } catch (error) {
-                console.error('Fehler:', error);
-                document.getElementById('top10-list').innerHTML = '<p class="error-msg">Fehler beim Laden der Spieldaten.</p>';
+                console.error('Initialisierungs-Fehler:', error);
+                document.getElementById('top10-list').innerHTML = '<p class="error-msg">Fehler beim Starten der App.</p>';
             }
         }
 
@@ -413,10 +455,10 @@
                     cacheGames(data);
                     refreshOnboardingGames(); 
                 } else {
-                    document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Fehler beim Laden.</div>';
+                    document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Fehler beim Laden. Hast du die Twitch-Daten auf Render eingegeben?</div>';
                 }
             } catch (err) {
-                document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Verbindung fehlgeschlagen.</div>';
+                document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Verbindung zum Server fehlgeschlagen.</div>';
             }
         }
 
@@ -511,44 +553,46 @@
         }
 
         async function loadMainData() {
-            const topRes = await fetch('/api/igdb', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 10;' })
-            });
-            top10Games = await topRes.json();
-            cacheGames(top10Games);
-            displayGames(top10Games, 'top10-list', true);
-
-            let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;';
-            
-            if (userPreferences && userPreferences.genreIds && userPreferences.genreIds.length > 0) {
-                catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
-                document.getElementById('catalog-title').style.display = 'block';
-            } else {
-                document.getElementById('catalog-title').style.display = 'none';
-            }
-
-            const catRes = await fetch('/api/igdb', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: catalogQuery })
-            });
-            allGames = await catRes.json();
-            
-            if (!allGames || allGames.length === 0) {
-                const fallbackRes = await fetch('/api/igdb', {
+            try {
+                // 1. Top 10 laden
+                const topRes = await fetch('/api/igdb', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;' })
+                    body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 10;' })
                 });
-                allGames = await fallbackRes.json();
-            }
+                top10Games = await topRes.json();
+                cacheGames(top10Games);
+                displayGames(top10Games, 'top10-list', true);
 
-            cacheGames(allGames);
-            displayGames(allGames, 'game-list');
-            updateFavCount();
-            updatePlayedCount();
+                // 2. Katalog laden (angepasst an Onboarding)
+                let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;';
+                
+                if (userPreferences && userPreferences.genreIds && userPreferences.genreIds.length > 0) {
+                    catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
+                    document.getElementById('catalog-title').style.display = 'block';
+                }
+
+                const catRes = await fetch('/api/igdb', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: catalogQuery })
+                });
+                allGames = await catRes.json();
+                
+                if (!allGames || allGames.length === 0) {
+                    const fallbackRes = await fetch('/api/igdb', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;' })
+                    });
+                    allGames = await fallbackRes.json();
+                }
+
+                cacheGames(allGames);
+                displayGames(allGames, 'game-list');
+            } catch (err) {
+                console.error("Fehler beim Laden der Hauptdaten:", err);
+            }
         }
 
         function switchTab(tabName) {
@@ -678,7 +722,6 @@
             if (currentGameDetail && currentGameDetail.id === gameId) {
                 renderDetailView(currentGameDetail);
             }
-
             refreshActiveListView();
         }
 
@@ -697,7 +740,6 @@
             if (currentGameDetail && currentGameDetail.id === gameId) {
                 renderDetailView(currentGameDetail);
             }
-
             refreshActiveListView();
         }
 
@@ -745,10 +787,9 @@
                         fetchedGames.forEach(g => favGames.push(g));
                     }
                 } catch (err) {
-                    console.error("Fehler beim Laden der Favoriten:", err);
+                    console.error("Fehler:", err);
                 }
             }
-
             displayGames(favGames, 'favorites-list');
             if (favGames.length === 0) {
                 container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 40px;">Noch keine Favoriten gespeichert.</p>';
@@ -774,10 +815,9 @@
                         fetchedGames.forEach(g => playedGames.push(g));
                     }
                 } catch (err) {
-                    console.error("Fehler beim Laden der gespielten Spiele:", err);
+                    console.error("Fehler:", err);
                 }
             }
-
             displayGames(playedGames, 'played-list');
             if (playedGames.length === 0) {
                 container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 40px;">Noch keine gespielten Spiele markiert.</p>';
@@ -813,18 +853,15 @@
                         body: JSON.stringify({ action: 'twitch_viewers', gameName: game.name })
                     });
                     viewerData = await twitchRes.json();
-                } catch (err) {
-                    console.error('Twitch fetch error:', err);
-                }
+                } catch (err) { }
 
                 renderDetailView(game, viewerData);
             } catch (error) {
-                console.error(error);
                 detailContainer.innerHTML = '<p class="error-msg">Fehler beim Laden der Spieldetails.</p>';
             }
         }
 
-        // Trophäen / Erfolge Funktionen
+        // Trophäen Funktionen
         function getGameAchievements(gameId) {
             return achievementsData[gameId] || [];
         }
@@ -838,9 +875,7 @@
                 "Auf dem höchsten Schwierigkeitsgrad durchgespielt",
                 "Platin-Trophäe / 100% aller Erfolge freigeschaltet"
             ];
-            if (!achievementsData[gameId]) {
-                achievementsData[gameId] = [];
-            }
+            if (!achievementsData[gameId]) achievementsData[gameId] = [];
             defaults.forEach(text => {
                 if (!achievementsData[gameId].some(t => t.text.toLowerCase() === text.toLowerCase())) {
                     achievementsData[gameId].push({ id: Date.now() + Math.random(), text: text, completed: false });
@@ -854,10 +889,7 @@
             const input = document.getElementById(`new-trophy-input-${gameId}`);
             const text = input.value.trim();
             if (!text) return;
-
-            if (!achievementsData[gameId]) {
-                achievementsData[gameId] = [];
-            }
+            if (!achievementsData[gameId]) achievementsData[gameId] = [];
             achievementsData[gameId].push({ id: Date.now(), text: text, completed: false });
             localStorage.setItem('igdb_achievements', JSON.stringify(achievementsData));
             renderDetailView(currentGameDetail);
@@ -925,7 +957,6 @@
 
                 <img src="${coverUrl}" alt="${game.name}" class="detail-banner">
                 
-                <!-- Trophäen / Erfolge Tracker Sektion -->
                 <div class="trophy-section">
                     <div class="trophy-header">
                         <span>🏆 Trophäen & Erfolge (${completedCount}/${totalCount})</span>
@@ -938,7 +969,7 @@
                     <button class="btn-load-defaults" onclick="loadDefaultAchievements(${game.id})">⚡ Typische Erfolge als Vorlage laden</button>
 
                     <div class="trophy-list">
-                        ${trophies.length > 0 ? trophiesHtml : '<p style="color: #777; font-size: 12px; text-align: center; padding: 10px;">Noch keine Trophäen eingetragen. Klicke auf den blauen Button oben oder füge eigene hinzu!</p>'}
+                        ${trophies.length > 0 ? trophiesHtml : '<p style="color: #777; font-size: 12px; text-align: center; padding: 10px;">Noch keine Trophäen eingetragen. Klicke auf den Button oben oder füge eigene hinzu!</p>'}
                     </div>
                     <div class="trophy-add-row">
                         <input type="text" id="new-trophy-input-${game.id}" class="trophy-input" placeholder="Eigene Trophäe eingeben..." onkeydown="if(event.key==='Enter') addAchievement(${game.id})">
@@ -965,7 +996,7 @@
             if (navigator.share) {
                 navigator.share({
                     title: currentGameDetail.name,
-                    text: `Schau dir ${currentGameDetail.name} auf Twitch und in der Spiele-Datenbank an!`,
+                    text: `Schau dir ${currentGameDetail.name} in meiner Spiele-Datenbank an!`,
                     url: window.location.href
                 }).catch(() => {});
             } else {
@@ -974,6 +1005,7 @@
             }
         }
 
+        // App-Start
         initApp();
     </script>
 
