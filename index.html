@@ -630,10 +630,8 @@
             const index = favorites.indexOf(id);
             if (index > -1) {
                 favorites.splice(index, 1);
-                alert("❌ Aus Favoriten entfernt!");
             } else {
                 favorites.push(id);
-                alert("❤️ Erfolgreich zu Favoriten hinzugefügt!");
             }
             localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
             location.reload();
@@ -644,10 +642,8 @@
             const index = played.indexOf(id);
             if (index > -1) {
                 played.splice(index, 1);
-                alert("❌ Aus Gespielt entfernt!");
             } else {
                 played.push(id);
-                alert("🎮 Erfolgreich als Gespielt markiert!");
             }
             localStorage.setItem('igdb_played', JSON.stringify(played));
             location.reload();
@@ -690,7 +686,6 @@
             }
         }
 
-        // NEU: Sucht beim Klick auf ein Steam-/Gespielt-Spiel automatisch nach allen IGDB-Daten & Medien!
         async function openSteamGameDetail(appid, encodedName) {
             const gameName = decodeURIComponent(encodedName);
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -725,7 +720,6 @@
                 };
             }
 
-            // Steam AppID für den Store-Link speichern
             gameData.steamAppId = appid;
             cacheGame(gameData);
 
@@ -740,7 +734,6 @@
         }
 
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
-            // Bevorzuge Steam Bibliothek-Cover oder IGDB Cover
             let coverUrl = '';
             if (game.steamAppId) {
                 coverUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.steamAppId}/library_600x900.jpg`;
@@ -748,7 +741,6 @@
                 coverUrl = 'https:' + game.cover.url.replace('t_thumb', 't_cover_big');
             }
 
-            // Steam Store Link ermitteln
             let steamUrl = '';
             if (game.steamAppId) {
                 steamUrl = `https://store.steampowered.com/app/${game.steamAppId}`;
@@ -760,17 +752,14 @@
                 if (steamSite) steamUrl = steamSite.url;
             }
 
-            // Twitch Verzeichnis-Link
             const twitchUrl = `https://www.twitch.tv/directory/game/${encodeURIComponent(game.name)}`;
 
-            // Video-Trailer
             let videoHtml = '';
             if (game.videos && game.videos.length > 0) {
                 const videoId = game.videos[0].video_id;
                 videoHtml = `<iframe class="detail-video" src="https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
             }
 
-            // Screenshot-Galerie
             let screenshotsHtml = '';
             if (game.screenshots && game.screenshots.length > 0) {
                 const topScreenshots = game.screenshots.slice(0, 5);
@@ -782,7 +771,6 @@
                 `;
             }
 
-            // Cover (Rot) und Steam Button (Gelb) nebeneinander oben
             let topHeaderHtml = `
                 <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px;">
                     ${coverUrl ? `<img src="${coverUrl}" onerror="this.src='https://via.placeholder.com/100x135?text=No+Img'" style="width: 100px; height: 135px; border-radius: 8px; object-fit: cover; background: #252525; flex-shrink: 0;">` : ''}
