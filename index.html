@@ -62,6 +62,12 @@
         .back-btn, .share-btn { background: #333; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .share-btn { background: #2b4c7e; font-size: 13px; }
         .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; background: #252525; }
+        .detail-video { width: 100%; aspect-ratio: 16/9; border-radius: 8px; margin-bottom: 15px; background: #252525; border: none; }
+        .screenshots-container { display: flex; gap: 10px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px; }
+        .screenshots-container img { width: 200px; height: 112px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #252525; }
+        .screenshots-container::-webkit-scrollbar { height: 6px; }
+        .screenshots-container::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
         .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
         .twitch-box { background: linear-gradient(135deg, #9146FF, #5c16c5); border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .loading-spinner { text-align: center; margin-top: 40px; color: #888; }
@@ -393,7 +399,7 @@
 
         async function loadMainData() {
             try {
-                const topRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; sort rating desc; limit 10;' }) });
+                const topRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; sort rating desc; limit 10;' }) });
                 const topData = await topRes.json(); 
                 if(Array.isArray(topData)) { 
                     top10Games = topData; 
@@ -403,8 +409,8 @@
                     document.getElementById('top10-list').innerHTML = '<div class="error-msg">IGDB-Fehler: Bitte prüfe Twitch Client-ID / Secret auf Render.</div>';
                 }
                 
-                let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where cover != null; sort rating_count desc; limit 40;';
-                if (userPreferences && userPreferences.genreIds) catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
+                let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where cover != null; sort rating_count desc; limit 40;';
+                if (userPreferences && userPreferences.genreIds) catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
                 
                 let catRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: catalogQuery }) });
                 const catData = await catRes.json(); 
@@ -513,7 +519,7 @@
             const query = document.getElementById('searchInput').value.trim();
             if (!query) return displayGames(allGames, 'game-list');
             try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `search "${query}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; limit 20;` }) });
+                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `search "${query}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; limit 20;` }) });
                 const results = await res.json(); 
                 if(Array.isArray(results)) { cacheGames(results); displayGames(results, 'game-list'); }
             } catch (e) {}
@@ -529,7 +535,7 @@
             const missing = favorites.filter(id => !gameCache[id]);
             if (missing.length > 0) {
                 try {
-                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
+                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where id = (${missing.join(',')});` }) });
                     const fetched = await res.json(); 
                     if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => favGames.push(g)); }
                 } catch(e){}
@@ -542,7 +548,7 @@
             const missing = played.filter(id => !gameCache[id]);
             if (missing.length > 0) {
                 try {
-                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
+                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where id = (${missing.join(',')});` }) });
                     const fetched = await res.json(); 
                     if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => playedGames.push(g)); }
                 } catch(e){}
@@ -553,10 +559,10 @@
         async function openGameDetail(gameId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails...</div>';
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails & Medien...</div>';
 
             try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = ${gameId};` }) });
+                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where id = ${gameId};` }) });
                 const data = await res.json(); 
                 if (!Array.isArray(data) || data.length === 0) throw new Error('Spiel nicht gefunden');
                 currentGameDetail = data[0]; 
@@ -580,12 +586,31 @@
             document.getElementById('viewDetail').classList.add('active');
             document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails...</div>';
 
-            let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, id: 'steam_' + appid };
+            let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, screenshots: [], videos: [], id: 'steam_' + appid };
             renderDetailView(fakeGame, { viewers: 0, streams: 0 });
         }
 
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
             const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
+
+            // Video-Trailer direkt inline in der App abspielen (ohne Weiterleitung)
+            let videoHtml = '';
+            if (game.videos && game.videos.length > 0) {
+                const videoId = game.videos[0].video_id;
+                videoHtml = `<iframe class="detail-video" src="https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+            }
+
+            // Screenshot-Galerie
+            let screenshotsHtml = '';
+            if (game.screenshots && game.screenshots.length > 0) {
+                const topScreenshots = game.screenshots.slice(0, 5);
+                screenshotsHtml = `
+                    <h3 style="margin-bottom: 8px; font-size: 15px;">Screenshots:</h3>
+                    <div class="screenshots-container">
+                        ${topScreenshots.map(s => `<img src="https://images.igdb.com/igdb/image/upload/t_screenshot_big/${s.image_id}.jpg" alt="Screenshot">`).join('')}
+                    </div>
+                `;
+            }
 
             document.getElementById('detail-content').innerHTML = `
                 <div class="twitch-box">
@@ -597,6 +622,8 @@
                     <h2 style="font-size: 20px;">${game.name}</h2>
                 </div>
 
+                ${videoHtml}
+                ${screenshotsHtml}
                 ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
 
                 <div class="detail-info">
