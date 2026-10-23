@@ -147,16 +147,35 @@ app.get('/auth/steam/return',
     }
 );
 
+// Steam Erfolge + Schema abrufen
 app.get('/api/achievements', async (req, res) => {
     const { steamid, appid } = req.query;
     if (!steamid || !appid) return res.status(400).json({ error: 'steamid und appid fehlen' });
     if (!STEAM_API_KEY) return res.status(500).json({ error: 'STEAM_API_KEY fehlt' });
     
     try {
-        const response = await axios.get(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${appid}&key=${STEAM_API_KEY}&steamid=${steamid}`);
-        res.json(response.data);
+        const playerRes = await axios.get(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${appid}&key=${STEAM_API_KEY}&steamid=${steamid}`);
+        const playerAchievements = playerRes.data.playerstats.achievements || [];
+
+        let schemaAchievements = [];
+        try {
+            const schemaRes = await axios.get(`https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v0002/?key=${STEAM_API_KEY}&appid=${appid}`);
+            schemaAchievements = schemaRes.data.game.availableGameStats.achievements || [];
+        } catch (e) {}
+
+        const merged = playerAchievements.map(pa => {
+            const schema = schemaAchievements.find(s => s.name === pa.apiname) || {};
+            return {
+                apiname: pa.apiname,
+                name: schema.displayName || pa.apiname,
+                description: schema.description || '',
+                achieved: pa.achieved === 1
+            };
+        });
+
+        res.json({ achievements: merged, success: true });
     } catch (error) {
-        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge' });
+        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge. Profil evtl. privat oder Spiel hat keine Erfolge.' });
     }
 });
 
@@ -191,7 +210,7 @@ app.post('/api/igdb', async (req, res) => {
             return res.json({ viewers: totalViewers, streams: activeStreams });
         }
 
-        let query = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 20;';
+        let query = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; sort rating desc; limit 20;';
         if (bodyData.query) query = bodyData.query;
         else if (typeof req.body === 'string' && req.body.trim().startsWith('fields')) query = req.body;
 
