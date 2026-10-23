@@ -63,13 +63,6 @@
         .share-btn { background: #2b4c7e; font-size: 13px; }
         .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; background: #252525; }
         .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
-        .trophy-section { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
-        .trophy-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #4da6ff; margin-bottom: 10px; }
-        .trophy-progress-bar { width: 100%; background: #333; height: 8px; border-radius: 4px; margin-bottom: 10px; }
-        .trophy-progress-fill { background: #2ea44f; height: 100%; width: 0%; transition: width 0.3s; }
-        .trophy-item { display: flex; align-items: center; gap: 10px; background: #262626; padding: 8px; border-radius: 6px; font-size: 13px; margin-bottom: 6px; }
-        .trophy-item.completed span { text-decoration: line-through; color: #888; }
-        .trophy-item input { width: 18px; height: 18px; accent-color: #2ea44f; flex-shrink: 0; cursor: pointer; }
         .twitch-box { background: linear-gradient(135deg, #9146FF, #5c16c5); border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .loading-spinner { text-align: center; margin-top: 40px; color: #888; }
         .error-msg { text-align: center; color: #ff4757; margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 8px; font-size: 13px; line-height: 1.5; }
@@ -209,7 +202,6 @@
                 return;
             }
 
-            // Passwort-Validierung im Frontend
             const passwordRegex = /^(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
             if (!passwordRegex.test(password)) {
                 errDiv.innerText = "Das Passwort muss mind. 8 Zeichen lang sein sowie eine Zahl und ein Sonderzeichen enthalten.";
@@ -561,7 +553,7 @@
         async function openGameDetail(gameId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails & Steam-Erfolge...</div>';
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails...</div>';
 
             try {
                 const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = ${gameId};` }) });
@@ -576,25 +568,7 @@
                     viewerData = await tRes.json(); 
                 } catch (e) {}
 
-                let steamAppId = null;
-                if (currentGameDetail.websites) {
-                    const steamSite = currentGameDetail.websites.find(w => w.category === 13);
-                    if (steamSite && steamSite.url) {
-                        const match = steamSite.url.match(/\/app\/([0-9]+)/);
-                        if (match) steamAppId = match[1];
-                    }
-                }
-
-                let steamAchievements = [];
-                if (steamAppId && currentUser && currentUser.steamId) {
-                    try {
-                        const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${steamAppId}`);
-                        const achData = await achRes.json();
-                        if (achData && achData.achievements) steamAchievements = achData.achievements;
-                    } catch (e) {}
-                }
-
-                renderDetailView(currentGameDetail, viewerData, steamAchievements, steamAppId);
+                renderDetailView(currentGameDetail, viewerData);
             } catch (e) {
                 document.getElementById('detail-content').innerHTML = '<div class="error-msg">Fehler beim Laden der Spieldetails.</div>';
             }
@@ -604,63 +578,14 @@
             const gameName = decodeURIComponent(encodedName);
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Steam-Erfolge...</div>';
-
-            let steamAchievements = [];
-            if (currentUser && currentUser.steamId) {
-                try {
-                    const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${appid}`);
-                    const achData = await achRes.json();
-                    if (achData && achData.achievements) steamAchievements = achData.achievements;
-                } catch (e) {}
-            }
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails...</div>';
 
             let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, id: 'steam_' + appid };
-            renderDetailView(fakeGame, { viewers: 0, streams: 0 }, steamAchievements, appid);
+            renderDetailView(fakeGame, { viewers: 0, streams: 0 });
         }
 
-        function toggleSteamAchievement(gameId, apiname) {
-            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${gameId}`)) || {};
-            const current = localAchState[apiname] !== undefined ? localAchState[apiname] : false;
-            localAchState[apiname] = !current;
-            localStorage.setItem(`steam_ach_${gameId}`, JSON.stringify(localAchState));
-            
-            if (currentGameDetail && currentGameDetail.id === gameId) {
-                openGameDetail(currentGameDetail.id);
-            } else {
-                location.reload();
-            }
-        }
-
-        function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }, steamAchievements = [], steamAppId = null) {
+        function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
             const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
-            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${game.id}`)) || {};
-            
-            const totalCount = steamAchievements.length;
-            const completedCount = steamAchievements.filter(a => localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved).length;
-            const perc = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-            let achievementsHtml = '';
-            if (!currentUser || !currentUser.steamId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto.</p>';
-            } else if (!steamAppId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam AppID gefunden.</p>';
-            } else if (totalCount === 0) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Erfolge gefunden oder Profil ist privat.</p>';
-            } else {
-                achievementsHtml = steamAchievements.map(a => {
-                    const isDone = localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved;
-                    return `
-                        <div class="trophy-item ${isDone ? 'completed' : ''}">
-                            <input type="checkbox" ${isDone ? 'checked' : ''} onclick="toggleSteamAchievement('${game.id}', '${a.apiname}')">
-                            <div style="flex: 1;">
-                                <div style="font-weight: bold; font-size: 13px;">${a.name}</div>
-                                <div style="font-size: 11px; color: #aaa;">${a.description}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
 
             document.getElementById('detail-content').innerHTML = `
                 <div class="twitch-box">
@@ -673,15 +598,6 @@
                 </div>
 
                 ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
-                
-                <div class="trophy-section">
-                    <div class="trophy-header">
-                        <span>🏆 Steam Erfolge (${completedCount}/${totalCount})</span>
-                        <span>${perc}%</span>
-                    </div>
-                    <div class="trophy-progress-bar"><div class="trophy-progress-fill" style="width: ${perc}%;"></div></div>
-                    <div class="trophy-list" style="max-height: 300px; overflow-y: auto;">${achievementsHtml}</div>
-                </div>
 
                 <div class="detail-info">
                     <p><strong>Genre:</strong> ${game.genres && game.genres.length ? game.genres.map(g => g.name).join(', ') : '-'}</p>
