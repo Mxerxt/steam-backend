@@ -23,9 +23,10 @@
         .steam-btn { background: #171a21; border: 1px solid #666; font-size: 11px; padding: 6px 10px; border-radius: 4px; color: #fff; text-decoration: none; display: inline-block; }
         .logout-btn { background: #333; border: 1px solid #555; color: #aaa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
-        .nav-tabs { display: flex; gap: 4px; margin-bottom: 15px; }
-        .tab-btn { flex: 1; padding: 9px 2px; background: #1e1e1e; color: #aaa; border: 1px solid #333; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; font-size: 11px; white-space: nowrap; }
+        .nav-tabs { display: flex; gap: 3px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 8px 2px; background: #1e1e1e; color: #aaa; border: 1px solid #333; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; font-size: 10px; white-space: nowrap; }
         .tab-btn.active { background: #2b4c7e; color: #fff; border-color: #4da6ff; }
+        
         .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
         input[type="text"].search-input { width: 100%; padding: 12px; background: #1e1e1e; color: #fff; border: 1px solid #333; border-radius: 8px; font-size: 14px; outline: none; }
         .btn-random { width: 100%; background: linear-gradient(135deg, #7928ca, #ff0080); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 15px; }
@@ -113,11 +114,13 @@
         
         <div class="user-header" id="user-header"></div>
 
+        <!-- ERWEITERTE TABS INKLUSIVE STEAM-BIBLIOTHEK -->
         <div class="nav-tabs">
             <div class="tab-btn" id="tabCatalog" onclick="switchTab('catalog')">🎮 Katalog</div>
             <div class="tab-btn" id="tabTop10" onclick="switchTab('top10')">🔥 Top 10</div>
-            <div class="tab-btn" id="tabFavorites" onclick="switchTab('favorites')">❤️ Fav (<span id="favCount">0</span>)</div>
-            <div class="tab-btn" id="tabPlayed" onclick="switchTab('played')">🕹️ Gespielt (<span id="playedCount">0</span>)</div>
+            <div class="tab-btn" id="tabFavorites" onclick="switchTab('favorites')">❤️ Fav</div>
+            <div class="tab-btn" id="tabPlayed" onclick="switchTab('played')">🕹️ Gesp.</div>
+            <div class="tab-btn" id="tabSteamLib" onclick="switchTab('steamlib')">👾 Steam-Bib</div>
         </div>
 
         <div id="viewCatalog" class="view">
@@ -130,6 +133,11 @@
         <div id="viewTop10" class="view"><div id="top10-list"><div class="loading-spinner">Lade...</div></div></div>
         <div id="viewFavorites" class="view"><div id="favorites-list"><div class="loading-spinner">Lade...</div></div></div>
         <div id="viewPlayed" class="view"><div id="played-list"><div class="loading-spinner">Lade...</div></div></div>
+        
+        <!-- STEAM BIBLIOTHEK ANSICHT -->
+        <div id="viewSteamLib" class="view">
+            <div id="steam-lib-list"><div class="loading-spinner">Lade Steam-Spiele...</div></div>
+        </div>
 
         <div id="viewDetail" class="view">
             <div class="detail-top-row">
@@ -142,7 +150,7 @@
 
     <script>
         let currentUser = null;
-        let allGames = [], top10Games = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
+        let allGames = [], top10Games = [], steamLibraryGames = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
         let favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
         let played = JSON.parse(localStorage.getItem('igdb_played')) || [];
         let userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
@@ -352,11 +360,16 @@
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
             localStorage.setItem('igdb_active_tab', tabName);
-            document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
-            document.getElementById('view' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
+            
+            const tabEl = document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+            const viewEl = document.getElementById('view' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+            if(tabEl) tabEl.classList.add('active');
+            if(viewEl) viewEl.classList.add('active');
+
             previousView = tabName;
             if (tabName === 'favorites') displayFavorites();
             if (tabName === 'played') displayPlayed();
+            if (tabName === 'steamlib') displaySteamLibrary();
         }
 
         function goBack() { switchTab(previousView === 'catalog' ? 'catalog' : previousView); }
@@ -379,6 +392,44 @@
                     </div>`;
                 container.appendChild(card);
             });
+        }
+
+        async function displaySteamLibrary() {
+            const container = document.getElementById('steam-lib-list');
+            if (!currentUser || !currentUser.steamId) {
+                container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Bitte verknüpfe zuerst oben dein Steam-Konto, um deine Steam-Bibliothek zu sehen.</p>';
+                return;
+            }
+            container.innerHTML = '<div class="loading-spinner">Lade Steam-Spiele...</div>';
+            try {
+                const res = await fetch(`/api/owned-games?steamid=${currentUser.steamId}`);
+                const data = await res.json();
+                if (!data.response || !data.response.games) {
+                    container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Keine Spiele gefunden oder Steam-Profil ist privat.</p>';
+                    return;
+                }
+                steamLibraryGames = data.response.games;
+                container.innerHTML = '';
+                
+                steamLibraryGames.forEach(game => {
+                    const iconUrl = game.img_icon_url ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg` : 'https://via.placeholder.com/70x90';
+                    const playtimeHours = (game.playtime_forever / 60).toFixed(1);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `
+                        <img src="${iconUrl}" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                        <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                            <div class="game-title">${game.name}</div>
+                            <div class="game-meta">Spielzeit: ${playtimeHours} Std.</div>
+                            <span class="score-badge">Steam AppID: ${game.appid}</span>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (e) {
+                container.innerHTML = '<p class="error-msg">Fehler beim Laden der Steam-Bibliothek.</p>';
+            }
         }
 
         async function searchGames() {
@@ -435,7 +486,6 @@
                     viewerData = await tRes.json(); 
                 } catch (e) {}
 
-                // Steam AppID über IGDB Websites (Category 13 = Steam) ermitteln
                 let steamAppId = null;
                 if (currentGameDetail.websites) {
                     const steamSite = currentGameDetail.websites.find(w => w.category === 13);
@@ -450,9 +500,7 @@
                     try {
                         const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${steamAppId}`);
                         const achData = await achRes.json();
-                        if (achData && achData.achievements) {
-                            steamAchievements = achData.achievements;
-                        }
+                        if (achData && achData.achievements) steamAchievements = achData.achievements;
                     } catch (e) {}
                 }
 
@@ -462,16 +510,40 @@
             }
         }
 
+        async function openSteamGameDetail(appid, encodedName) {
+            const gameName = decodeURIComponent(encodedName);
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('viewDetail').classList.add('active');
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Steam-Erfolge...</div>';
+
+            let steamAchievements = [];
+            if (currentUser && currentUser.steamId) {
+                try {
+                    const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${appid}`);
+                    const achData = await achRes.json();
+                    if (achData && achData.achievements) steamAchievements = achData.achievements;
+                } catch (e) {}
+            }
+
+            let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, id: 'steam_' + appid };
+            renderDetailView(fakeGame, { viewers: 0, streams: 0 }, steamAchievements, appid);
+        }
+
         function toggleSteamAchievement(gameId, apiname) {
             let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${gameId}`)) || {};
             const current = localAchState[apiname] !== undefined ? localAchState[apiname] : false;
             localAchState[apiname] = !current;
             localStorage.setItem(`steam_ach_${gameId}`, JSON.stringify(localAchState));
-            openGameDetail(gameId);
+            
+            if (currentGameDetail && currentGameDetail.id === gameId) {
+                openGameDetail(currentGameDetail.id);
+            } else {
+                location.reload();
+            }
         }
 
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }, steamAchievements = [], steamAppId = null) {
-            const coverUrl = game.cover ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
+            const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
             let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${game.id}`)) || {};
             
             const totalCount = steamAchievements.length;
@@ -482,9 +554,9 @@
             if (!currentUser || !currentUser.steamId) {
                 achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto, um deine Steam-Erfolge zu sehen.</p>';
             } else if (!steamAppId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Für dieses Spiel wurde kein Steam-Eintrag gefunden.</p>';
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Für dieses Spiel wurde keine Steam AppID gefunden.</p>';
             } else if (totalCount === 0) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam-Erfolge gefunden oder das Steam-Profil ist privat.</p>';
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam-Erfolge gefunden oder das Profil ist privat.</p>';
             } else {
                 achievementsHtml = steamAchievements.map(a => {
                     const isDone = localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved;
@@ -510,7 +582,7 @@
                     <h2 style="font-size: 20px;">${game.name}</h2>
                 </div>
 
-                <img src="${coverUrl}" class="detail-banner">
+                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
                 
                 <div class="trophy-section">
                     <div class="trophy-header">
@@ -518,17 +590,16 @@
                         <span>${perc}%</span>
                     </div>
                     <div class="trophy-progress-bar"><div class="trophy-progress-fill" style="width: ${perc}%;"></div></div>
-                    <div class="trophy-list" style="max-height: 250px; overflow-y: auto;">${achievementsHtml}</div>
+                    <div class="trophy-list" style="max-height: 300px; overflow-y: auto;">${achievementsHtml}</div>
                 </div>
 
                 <div class="detail-info">
-                    <p><strong>Genre:</strong> ${game.genres ? game.genres.map(g => g.name).join(', ') : '-'}</p>
-                    <p><strong>Plattformen:</strong> ${game.platforms ? game.platforms.map(p => p.name).join(', ') : '-'}</p>
+                    <p><strong>Genre:</strong> ${game.genres && game.genres.length ? game.genres.map(g => g.name).join(', ') : '-'}</p>
+                    <p><strong>Plattformen:</strong> ${game.platforms && game.platforms.length ? game.platforms.map(p => p.name).join(', ') : '-'}</p>
                     <p><strong>Erscheinungsjahr:</strong> ${game.first_release_date ? new Date(game.first_release_date * 1000).getFullYear() : '-'}</p>
                     <p><strong>IGDB Bewertung:</strong> ⭐ ${game.rating ? (game.rating/10).toFixed(1) : '-'} / 10</p>
                 </div>
-                <h3 style="margin-bottom: 8px; font-size: 15px;">Über das Spiel:</h3>
-                <div class="detail-info"><p>${game.summary || 'Keine Beschreibung verfügbar.'}</p></div>
+                ${game.summary ? `<h3 style="margin-bottom: 8px; font-size: 15px;">Über das Spiel:</h3><div class="detail-info"><p>${game.summary}</p></div>` : ''}
             `;
         }
 
