@@ -1,689 +1,117 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ultimative Spiele-Datenbank</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            background: #121212; 
-            color: #fff; 
-            padding: 15px; 
-            max-width: 480px; 
-            margin: auto; 
-            padding-bottom: 70px;
-        }
-        h1 { font-size: 22px; margin-bottom: 5px; text-align: center; }
-        .subtitle { font-size: 11px; color: #aaa; text-align: center; margin-bottom: 15px; }
+const express = require('express');
+const session = require('express-session');
+const passport = require('passport');
+const SteamStrategy = require('passport-steam').Strategy;
+const axios = require('axios');
+const path = require('path');
 
-        /* Steam Auth Box */
-        .auth-box { 
-            background: #1e1e1e; 
-            padding: 10px 15px; 
-            border-radius: 8px; 
-            margin-bottom: 15px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border: 1px solid #333; 
-        }
-        .auth-btn {
-            background: #171a21; /* Steam Farbe */
-            color: white;
-            border: 1px solid #666;
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 12px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .auth-btn:active { transform: scale(0.95); }
-        .auth-btn.logout {
-            background: #333;
-            border: 1px solid #555;
-            color: #aaa;
-        }
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-        /* Navigation Tabs */
-        .nav-tabs { display: flex; gap: 4px; margin-bottom: 15px; }
-        .tab-btn { 
-            flex: 1; 
-            padding: 9px 2px; 
-            background: #1e1e1e; 
-            color: #aaa; 
-            border: 1px solid #333; 
-            border-radius: 8px; 
-            text-align: center; 
-            font-weight: bold; 
-            cursor: pointer;
-            font-size: 11px;
-            white-space: nowrap;
-        }
-        .tab-btn.active { background: #2b4c7e; color: #fff; border-color: #4da6ff; }
+// Render Proxy vertrauen
+app.set('trust proxy', 1);
 
-        .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
-        input[type="text"].search-input { 
-            width: 100%; 
-            padding: 12px; 
-            background: #1e1e1e; 
-            color: #fff; 
-            border: 1px solid #333; 
-            border-radius: 8px; 
-            font-size: 14px; 
-            outline: none;
-        }
-        .btn-random {
-            width: 100%;
-            background: linear-gradient(135deg, #7928ca, #ff0080);
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 15px;
-            cursor: pointer;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 10px rgba(255,0,128,0.3);
-        }
-        .btn-random:active { transform: scale(0.98); }
+const HOST_URL = process.env.RENDER_EXTERNAL_URL || 'https://steam-backend-88lk.onrender.com';
+const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || '';
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || '';
 
-        .view { display: none; }
-        .view.active { display: block; }
+app.use(express.json({ limit: '1mb' }));
+app.use(express.text({ type: 'text/plain', limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-        /* Onboarding */
-        #viewOnboarding {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #121212;
-            z-index: 1000;
-            padding: 15px;
-            overflow-y: auto;
-            display: none;
-        }
-        #viewOnboarding.active { display: block; }
-        
-        .onboard-wrapper { max-width: 600px; margin: 0 auto; }
-        .onboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; margin-bottom: 30px; }
-        .onboard-card { background: #1e1e1e; border-radius: 6px; padding: 5px; text-align: center; cursor: pointer; position: relative; }
-        .onboard-card.selected { background: #1a2e20; box-shadow: 0 0 0 2px #2ea44f inset; }
-        .onboard-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 4px; margin-bottom: 4px; }
-        .onboard-card .title { font-size: 10px; font-weight: bold; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; height: 24px; word-break: break-word; }
-        .check-icon { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; background: rgba(0,0,0,0.8); border: 1px solid #aaa; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: transparent; z-index: 2; }
-        .onboard-card.selected .check-icon { background: #2ea44f; border-color: #2ea44f; color: #fff; }
-        .btn-reload-games { background: #2b4c7e; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
-        .btn-submit-onboard { width: 100%; background: #333; color: #888; border: none; padding: 14px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: not-allowed; margin-bottom: 40px; }
-        .btn-submit-onboard.active { background: #2ea44f; color: white; cursor: pointer; }
+// HIER WAR DER FEHLER: Wir haben die zu strengen Cookie-Regeln entfernt, 
+// damit Render die Sitzung beim Steam-Return nicht verliert!
+app.use(session({
+    secret: 'steam_app_super_secret_key_99',
+    resave: true,
+    saveUninitialized: true
+}));
 
-        /* Game Cards */
-        .game-card { background: #1e1e1e; padding: 12px; margin-bottom: 15px; border-radius: 10px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
-        .game-card img { width: 70px; height: 90px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
-        .game-info { flex: 1; overflow: hidden; }
-        .game-title { font-size: 15px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .game-meta { font-size: 12px; color: #aaa; margin-bottom: 6px; }
-        .score-badge { background: #2ea44f; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 6px; display: inline-block; }
-        
-        .action-buttons { display: flex; flex-direction: column; gap: 4px; align-items: center; }
-        .fav-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 3px; }
-        .fav-btn.active { color: #ff4757; }
-        .played-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 3px; filter: grayscale(100%); opacity: 0.5; }
-        .played-btn.active { filter: none; opacity: 1; color: #4da6ff; }
+app.use(passport.initialize());
+app.use(passport.session());
 
-        /* Detail-Ansicht */
-        .detail-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .back-btn { background: #333; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .share-btn { background: #2b4c7e; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
-        .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; }
-        .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
-        .detail-info p { margin-bottom: 8px; }
-        
-        /* Trophäen */
-        .trophy-section { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
-        .trophy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; font-size: 14px; color: #4da6ff; }
-        .trophy-progress-bar { width: 100%; background: #333; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
-        .trophy-progress-fill { background: #2ea44f; height: 100%; width: 0%; transition: width 0.3s; }
-        .trophy-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; margin-bottom: 10px; }
-        .trophy-item { display: flex; align-items: center; gap: 10px; background: #262626; padding: 8px; border-radius: 6px; font-size: 13px; }
-        .trophy-item input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #2ea44f; }
-        .trophy-item span { flex: 1; word-break: break-word; }
-        .trophy-item.completed span { text-decoration: line-through; color: #888; }
-        .trophy-add-row { display: flex; gap: 6px; margin-top: 8px; }
-        .trophy-input { flex: 1; padding: 8px; background: #121212; color: #fff; border: 1px solid #444; border-radius: 6px; font-size: 13px; outline: none; }
-        .trophy-add-btn { background: #2ea44f; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
-        .btn-load-defaults { background: #2b4c7e; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; margin-bottom: 10px; width: 100%; }
+app.use(express.static(__dirname));
 
-        .twitch-box { background: linear-gradient(135deg, #9146FF, #5c16c5); border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .twitch-box span { font-size: 16px; font-weight: bold; color: #fff; }
-        .loading-spinner { text-align: center; margin-top: 40px; color: #888; }
-        .error-msg { text-align: center; color: #ff4757; font-weight: bold; padding: 20px; }
-    </style>
-</head>
-<body>
+if (STEAM_API_KEY) {
+    passport.use(new SteamStrategy({
+        returnURL: `${HOST_URL}/auth/steam/return`,
+        realm: `${HOST_URL}/`,
+        apiKey: STEAM_API_KEY
+      },
+      function(identifier, profile, done) {
+        profile.identifier = identifier;
+        return done(null, profile);
+      }
+    ));
+}
 
-    <!-- ONBOARDING MODAL -->
-    <div id="viewOnboarding">
-        <div class="onboard-wrapper">
-            <h1 style="margin-top: 5px;">👋 Willkommen!</h1>
-            <div class="subtitle" style="margin-bottom: 15px;">Wähle <strong>mindestens 5 bekannte Spiele</strong> aus, die du magst.</div>
-            <div style="text-align: center;"><button class="btn-reload-games" onclick="refreshOnboardingGames()">🔄 Andere Spiele anzeigen</button></div>
-            <div id="onboard-selection-count" style="text-align: center; font-size: 14px; font-weight: bold; color: #4da6ff; margin-bottom: 15px;">Ausgewählt: 0 (Noch mind. 5)</div>
-            <div class="onboard-grid" id="onboard-grid"><div class="loading-spinner" style="grid-column: 1 / -1;">Suche nach Blockbustern...</div></div>
-            <button class="btn-submit-onboard" id="onboardSubmitBtn" onclick="finishOnboarding()" disabled>App starten 🚀</button>
-        </div>
-    </div>
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(obj));
 
-    <!-- HAUPT-APP -->
-    <h1>🎮 Spiele-Datenbank</h1>
-    <div class="subtitle">Alle Spiele, MMOs & Abo-Titel</div>
+app.get('/auth/steam', (req, res, next) => {
+    if (!STEAM_API_KEY) return res.status(500).send('Fehler: STEAM_API_KEY fehlt!');
+    passport.authenticate('steam')(req, res, next);
+});
 
-    <!-- STEAM REGISTRIERUNG & AUTO-LOGIN -->
-    <div id="auth-box-container" class="auth-box">
-        <!-- Wird durch JavaScript gefüllt -->
-    </div>
+app.get('/auth/steam/return', 
+    passport.authenticate('steam', { failureRedirect: '/' }),
+    (req, res) => {
+        res.redirect(`/?steamid=${req.user.id}&name=${encodeURIComponent(req.user.displayName)}`);
+    }
+);
 
-    <div class="nav-tabs">
-        <div class="tab-btn" id="tabCatalog" onclick="switchTab('catalog')">🎮 Katalog</div>
-        <div class="tab-btn" id="tabTop10" onclick="switchTab('top10')">🔥 Top 10</div>
-        <div class="tab-btn" id="tabFavorites" onclick="switchTab('favorites')">❤️ Fav (<span id="favCount">0</span>)</div>
-        <div class="tab-btn" id="tabPlayed" onclick="switchTab('played')">🕹️ Gespielt (<span id="playedCount">0</span>)</div>
-    </div>
+app.get('/api/achievements', async (req, res) => {
+    const { steamid, appid } = req.query;
+    if (!steamid || !appid) return res.status(400).json({ error: 'steamid und appid fehlen' });
+    if (!STEAM_API_KEY) return res.status(500).json({ error: 'STEAM_API_KEY fehlt' });
+    
+    try {
+        const response = await axios.get(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${appid}&key=${STEAM_API_KEY}&steamid=${steamid}`);
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge' });
+    }
+});
 
-    <!-- KATALOG -->
-    <div id="viewCatalog" class="view">
-        <button class="btn-random" onclick="openRandomGame()">🎲 Zufälliges Spiel entdecken</button>
-        <div class="controls">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Nach Spiel suchen..." oninput="searchGames()">
-        </div>
-        <h3 style="font-size: 16px; margin-bottom: 10px; color: #4da6ff; display: none;" id="catalog-title">🎮 Maßgeschneidert für dich</h3>
-        <div id="game-list"><div class="loading-spinner">Lade Katalog...</div></div>
-    </div>
+app.post('/api/igdb', async (req, res) => {
+    if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) return res.status(500).json({ error: 'Twitch Credentials fehlen.' });
+    try {
+        const tokenRes = await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${TWITCH_CLIENT_ID}&client_secret=${TWITCH_CLIENT_SECRET}&grant_type=client_credentials`);
+        const accessToken = tokenRes.data.access_token;
+        let bodyData = {};
+        if (typeof req.body === 'string') {
+            try { bodyData = JSON.parse(req.body); } catch (e) { bodyData = { query: req.body }; }
+        } else { bodyData = req.body || {}; }
 
-    <div id="viewTop10" class="view"><div id="top10-list"><div class="loading-spinner">Lade Top 10...</div></div></div>
-    <div id="viewFavorites" class="view"><div id="favorites-list"><div class="loading-spinner">Lade Favoriten...</div></div></div>
-    <div id="viewPlayed" class="view"><div id="played-list"><div class="loading-spinner">Lade gespielte Spiele...</div></div></div>
-
-    <div id="viewDetail" class="view">
-        <div class="detail-top-row">
-            <button class="back-btn" onclick="goBack()">← Zurück</button>
-            <button class="share-btn" onclick="shareCurrentGame()">📤 Teilen</button>
-        </div>
-        <div id="detail-content"><div class="loading-spinner">Lade Spieldetails...</div></div>
-    </div>
-
-    <script>
-        let allGames = [];
-        let top10Games = [];
-        let favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
-        let played = JSON.parse(localStorage.getItem('igdb_played')) || [];
-        let achievementsData = JSON.parse(localStorage.getItem('igdb_achievements')) || {};
-        let userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
-        let gameCache = JSON.parse(localStorage.getItem('igdb_game_cache')) || {};
-
-        let allPopularGames = [];
-        let currentOnboardingView = [];
-        let selectedOnboardIds = [];
-        let previousView = 'top10';
-        let currentGameDetail = null;
-
-        function cacheGame(game) {
-            if (game && game.id) { gameCache[game.id] = game; localStorage.setItem('igdb_game_cache', JSON.stringify(gameCache)); }
-        }
-
-        function cacheGames(games) {
-            if (Array.isArray(games)) {
-                games.forEach(g => { if (g && g.id) gameCache[g.id] = g; });
-                localStorage.setItem('igdb_game_cache', JSON.stringify(gameCache));
+        if (bodyData.action === 'twitch_viewers') {
+            const gameName = bodyData.gameName;
+            if (!gameName) return res.json({ viewers: 0, streams: 0 });
+            const gameRes = await axios.get(`https://api.twitch.tv/helix/games?name=${encodeURIComponent(gameName)}`, { headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` } });
+            if (!gameRes.data.data || gameRes.data.data.length === 0) return res.json({ viewers: 0, streams: 0 });
+            
+            const twitchGameId = gameRes.data.data[0].id;
+            const streamsRes = await axios.get(`https://api.twitch.tv/helix/streams?game_id=${twitchGameId}&first=100`, { headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` } });
+            
+            let totalViewers = 0, activeStreams = 0;
+            if (streamsRes.data.data) {
+                activeStreams = streamsRes.data.data.length;
+                totalViewers = streamsRes.data.data.reduce((sum, s) => sum + s.viewer_count, 0);
             }
+            return res.json({ viewers: totalViewers, streams: activeStreams });
         }
 
-        async function initApp() {
-            try {
-                // 1. Prüfen, ob der Nutzer GERADE von der Steam-Seite zurückkommt
-                const urlParams = new URLSearchParams(window.location.search);
-                const steamIdParam = urlParams.get('steamid');
-                const steamNameParam = urlParams.get('name');
+        let query = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 20;';
+        if (bodyData.query) query = bodyData.query;
+        else if (typeof req.body === 'string' && req.body.trim().startsWith('fields')) query = req.body;
 
-                // Wenn ja, speichern wir ihn fest in der App (Auto-Login für die Zukunft)
-                if (steamIdParam) {
-                    localStorage.setItem('steam_id', steamIdParam);
-                    localStorage.setItem('steam_name', steamNameParam);
-                    // Die URL oben im Browser bereinigen, damit sie schön aussieht
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
+        const igdbRes = await axios.post('https://api.igdb.com/v4/games', query, {
+            headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'text/plain' }
+        });
+        res.json(igdbRes.data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
-                // 2. Den Login-Status prüfen und anzeigen
-                const savedSteamId = localStorage.getItem('steam_id');
-                const savedSteamName = localStorage.getItem('steam_name');
-                const authContainer = document.getElementById('auth-box-container');
-
-                if (savedSteamId) {
-                    // Nutzer ist bereits registriert und wird automatisch erkannt!
-                    authContainer.innerHTML = `
-                        <div style="font-size: 13px;">Steam-Profil: <strong style="color: #4da6ff;">${savedSteamName}</strong></div>
-                        <button class="auth-btn logout" onclick="logoutSteam()">Abmelden</button>
-                    `;
-                } else {
-                    // Nutzer ist neu und muss sich einmalig via Steam registrieren
-                    authContainer.innerHTML = `
-                        <div style="font-size: 13px; color: #aaa;">Nicht verbunden</div>
-                        <a href="https://steam-backend-88lk.onrender.com/auth/steam" class="auth-btn">🎮 Mit Steam registrieren</a>
-                    `;
-                }
-
-                updateFavCount();
-                updatePlayedCount();
-
-                if (!userPreferences) {
-                    await loadOnboardingPool();
-                    return;
-                }
-                
-                await loadMainData();
-                const savedTab = localStorage.getItem('igdb_active_tab') || 'top10';
-                switchTab(savedTab);
-            } catch (error) {
-                console.error('Fehler:', error);
-            }
-        }
-
-        function logoutSteam() {
-            if(confirm("Möchtest du dein Steam-Profil von dieser App trennen? Deine Favoriten bleiben erhalten!")) {
-                localStorage.removeItem('steam_id');
-                localStorage.removeItem('steam_name');
-                location.reload();
-            }
-        }
-
-        async function loadOnboardingPool() {
-            document.getElementById('viewOnboarding').classList.add('active');
-            try {
-                const res = await fetch('/api/igdb', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'fields name, cover.url, genres; where cover != null; sort rating_count desc; limit 80;' })
-                });
-                const data = await res.json();
-                
-                if (Array.isArray(data) && data.length > 0 && !data[0].status) {
-                    allPopularGames = data;
-                    cacheGames(data);
-                    refreshOnboardingGames(); 
-                } else {
-                    document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Fehler beim Laden.</div>';
-                }
-            } catch (err) {
-                document.getElementById('onboard-grid').innerHTML = '<div class="error-msg">Verbindung fehlgeschlagen.</div>';
-            }
-        }
-
-        function refreshOnboardingGames() {
-            if (allPopularGames.length === 0) return;
-            let shuffled = [...allPopularGames];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            currentOnboardingView = shuffled.slice(0, 30);
-            renderOnboardingGrid();
-        }
-
-        function renderOnboardingGrid() {
-            const grid = document.getElementById('onboard-grid');
-            grid.innerHTML = '';
-            currentOnboardingView.forEach(game => {
-                const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : 'https://via.placeholder.com/150x200?text=No+Img';
-                const isSelected = selectedOnboardIds.includes(game.id);
-                const card = document.createElement('div');
-                card.className = `onboard-card ${isSelected ? 'selected' : ''}`;
-                card.onclick = () => toggleOnboardGame(game.id);
-                card.innerHTML = `<div class="check-icon">✔</div><img src="${coverUrl}" alt="${game.name}"><div class="title">${game.name}</div>`;
-                grid.appendChild(card);
-            });
-        }
-
-        function toggleOnboardGame(gameId) {
-            const index = selectedOnboardIds.indexOf(gameId);
-            if (index > -1) selectedOnboardIds.splice(index, 1);
-            else selectedOnboardIds.push(gameId);
-
-            const counterText = document.getElementById('onboard-selection-count');
-            const submitBtn = document.getElementById('onboardSubmitBtn');
-
-            if (selectedOnboardIds.length >= 5) {
-                counterText.textContent = `Ausgewählt: ${selectedOnboardIds.length} ✅`;
-                counterText.style.color = '#2ea44f';
-                submitBtn.disabled = false;
-                submitBtn.classList.add('active');
-            } else {
-                counterText.textContent = `Ausgewählt: ${selectedOnboardIds.length} (Noch mind. ${5 - selectedOnboardIds.length})`;
-                counterText.style.color = '#4da6ff';
-                submitBtn.disabled = true;
-                submitBtn.classList.remove('active');
-            }
-            renderOnboardingGrid();
-        }
-
-        async function finishOnboarding() {
-            if (selectedOnboardIds.length < 5) return;
-            const chosenGames = allPopularGames.filter(g => selectedOnboardIds.includes(g.id));
-            cacheGames(chosenGames); 
-
-            let genreIds = [];
-            chosenGames.forEach(g => { if (g.genres) genreIds = genreIds.concat(g.genres); });
-            genreIds = [...new Set(genreIds)];
-
-            userPreferences = { gameIds: selectedOnboardIds, genreIds: genreIds };
-            localStorage.setItem('igdb_user_preferences', JSON.stringify(userPreferences));
-
-            selectedOnboardIds.forEach(id => { if (!favorites.includes(id)) favorites.push(id); });
-            localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
-            updateFavCount();
-
-            document.getElementById('viewOnboarding').classList.remove('active');
-            await loadMainData();
-            switchTab('top10');
-        }
-
-        async function loadMainData() {
-            try {
-                const topRes = await fetch('/api/igdb', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; sort rating desc; limit 10;' })
-                });
-                top10Games = await topRes.json();
-                cacheGames(top10Games);
-                displayGames(top10Games, 'top10-list', true);
-
-                let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;';
-                if (userPreferences && userPreferences.genreIds && userPreferences.genreIds.length > 0) {
-                    catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
-                    document.getElementById('catalog-title').style.display = 'block';
-                }
-
-                const catRes = await fetch('/api/igdb', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: catalogQuery })
-                });
-                allGames = await catRes.json();
-                
-                if (!allGames || allGames.length === 0) {
-                    const fallbackRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where cover != null; sort rating_count desc; limit 40;' }) });
-                    allGames = await fallbackRes.json();
-                }
-                cacheGames(allGames);
-                displayGames(allGames, 'game-list');
-            } catch (err) {}
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-            localStorage.setItem('igdb_active_tab', tabName);
-
-            if (tabName === 'catalog') { document.getElementById('tabCatalog').classList.add('active'); document.getElementById('viewCatalog').classList.add('active'); previousView = 'catalog'; } 
-            else if (tabName === 'top10') { document.getElementById('tabTop10').classList.add('active'); document.getElementById('viewTop10').classList.add('active'); previousView = 'top10'; } 
-            else if (tabName === 'favorites') { document.getElementById('tabFavorites').classList.add('active'); document.getElementById('viewFavorites').classList.add('active'); previousView = 'favorites'; displayFavorites(); } 
-            else if (tabName === 'played') { document.getElementById('tabPlayed').classList.add('active'); document.getElementById('viewPlayed').classList.add('active'); previousView = 'played'; displayPlayed(); }
-        }
-
-        function goBack() {
-            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-            if (previousView === 'top10') { document.getElementById('viewTop10').classList.add('active'); document.getElementById('tabTop10').classList.add('active'); } 
-            else if (previousView === 'favorites') { document.getElementById('viewFavorites').classList.add('active'); document.getElementById('tabFavorites').classList.add('active'); } 
-            else if (previousView === 'played') { document.getElementById('viewPlayed').classList.add('active'); document.getElementById('tabPlayed').classList.add('active'); } 
-            else { document.getElementById('viewCatalog').classList.add('active'); document.getElementById('tabCatalog').classList.add('active'); }
-        }
-
-        function displayGames(gamesToDisplay, containerId, isTop10List = false) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            if (!gamesToDisplay || gamesToDisplay.length === 0) { container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 30px;">Keine Spiele gefunden.</p>'; return; }
-
-            gamesToDisplay.forEach((game, index) => {
-                const isFav = favorites.includes(game.id);
-                const isPlayed = played.includes(game.id);
-                const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_small') : 'https://via.placeholder.com/70x90?text=No+Img';
-                const ratingScore = game.rating ? (game.rating / 10).toFixed(1) : 'N/A';
-                const rankText = isTop10List ? `#${index + 1} ` : '';
-                const genreName = game.genres && game.genres.length > 0 ? game.genres[0].name : 'Spiel';
-
-                const card = document.createElement('div');
-                card.className = 'game-card';
-                card.innerHTML = `
-                    <img src="${coverUrl}" alt="${game.name}" onclick="openGameDetail(${game.id})">
-                    <div class="game-info" onclick="openGameDetail(${game.id})">
-                        <div class="game-title">${rankText}${game.name}</div>
-                        <div class="game-meta">${genreName} • ⭐ ${ratingScore}</div>
-                        <span class="score-badge">IGDB Score</span>
-                    </div>
-                    <div class="action-buttons">
-                        <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, ${game.id})" title="Favorit">${isFav ? '❤️' : '♡'}</button>
-                        <button class="played-btn ${isPlayed ? 'active' : ''}" onclick="togglePlayed(event, ${game.id})" title="Bereits gespielt">🎮</button>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        async function searchGames() {
-            const queryText = document.getElementById('searchInput').value.trim();
-            if (queryText === '') { displayGames(allGames, 'game-list'); document.getElementById('catalog-title').style.display = userPreferences ? 'block' : 'none'; return; }
-            document.getElementById('catalog-title').style.display = 'none';
-            const container = document.getElementById('game-list');
-            container.innerHTML = '<div class="loading-spinner">Suche...</div>';
-
-            try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `search "${queryText}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; limit 20;` }) });
-                const results = await res.json();
-                cacheGames(results);
-                displayGames(results, 'game-list');
-            } catch (e) { container.innerHTML = '<p class="error-msg">Fehler bei der Suche.</p>'; }
-        }
-
-        function openRandomGame() {
-            const list = allGames.length > 0 ? allGames : top10Games;
-            if (list.length === 0) return;
-            openGameDetail(list[Math.floor(Math.random() * list.length)].id);
-        }
-
-        function toggleFavorite(event, gameId) {
-            event.stopPropagation();
-            const index = favorites.indexOf(gameId);
-            if (index > -1) favorites.splice(index, 1); else favorites.push(gameId);
-            localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
-            updateFavCount();
-            if (currentGameDetail && currentGameDetail.id === gameId) renderDetailView(currentGameDetail);
-            refreshActiveListView();
-        }
-
-        function togglePlayed(event, gameId) {
-            event.stopPropagation();
-            const index = played.indexOf(gameId);
-            if (index > -1) played.splice(index, 1); else played.push(gameId);
-            localStorage.setItem('igdb_played', JSON.stringify(played));
-            updatePlayedCount();
-            if (currentGameDetail && currentGameDetail.id === gameId) renderDetailView(currentGameDetail);
-            refreshActiveListView();
-        }
-
-        function refreshActiveListView() {
-            if (document.getElementById('viewFavorites').classList.contains('active')) displayFavorites();
-            else if (document.getElementById('viewPlayed').classList.contains('active')) displayPlayed();
-            else if (document.getElementById('viewTop10').classList.contains('active')) displayGames(top10Games, 'top10-list', true);
-            else if (document.getElementById('viewCatalog').classList.contains('active')) {
-                const queryText = document.getElementById('searchInput').value.trim();
-                if (queryText !== '') searchGames(); else displayGames(allGames, 'game-list');
-            }
-        }
-
-        function updateFavCount() { document.getElementById('favCount').textContent = favorites.length; }
-        function updatePlayedCount() { document.getElementById('playedCount').textContent = played.length; }
-
-        async function displayFavorites() {
-            const container = document.getElementById('favorites-list');
-            let favGames = favorites.map(id => gameCache[id]).filter(g => g !== undefined);
-            const missingIds = favorites.filter(id => !gameCache[id]);
-            if (missingIds.length > 0) {
-                container.innerHTML = '<div class="loading-spinner">Lade Favoriten...</div>';
-                try {
-                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where id = (${missingIds.join(',')});` }) });
-                    const fetchedGames = await res.json();
-                    if (Array.isArray(fetchedGames)) { cacheGames(fetchedGames); fetchedGames.forEach(g => favGames.push(g)); }
-                } catch (err) {}
-            }
-            displayGames(favGames, 'favorites-list');
-            if (favGames.length === 0) container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 40px;">Noch keine Favoriten gespeichert.</p>';
-        }
-
-        async function displayPlayed() {
-            const container = document.getElementById('played-list');
-            let playedGames = played.map(id => gameCache[id]).filter(g => g !== undefined);
-            const missingIds = played.filter(id => !gameCache[id]);
-            if (missingIds.length > 0) {
-                container.innerHTML = '<div class="loading-spinner">Lade gespielte Spiele...</div>';
-                try {
-                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where id = (${missingIds.join(',')});` }) });
-                    const fetchedGames = await res.json();
-                    if (Array.isArray(fetchedGames)) { cacheGames(fetchedGames); fetchedGames.forEach(g => playedGames.push(g)); }
-                } catch (err) {}
-            }
-            displayGames(playedGames, 'played-list');
-            if (playedGames.length === 0) container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 40px;">Noch keine gespielten Spiele markiert.</p>';
-        }
-
-        async function openGameDetail(gameId) {
-            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-            const detailView = document.getElementById('viewDetail');
-            detailView.classList.add('active');
-            const detailContainer = document.getElementById('detail-content');
-            detailContainer.innerHTML = '<div class="loading-spinner">Lade Spieldetails & Twitch-Zuschauer...</div>';
-
-            try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date; where id = ${gameId};` }) });
-                const data = await res.json();
-                if (!data || data.length === 0) throw new Error('Spiel nicht gefunden');
-                const game = data[0];
-                currentGameDetail = game;
-                cacheGame(game);
-
-                let viewerData = { viewers: 0, streams: 0 };
-                try {
-                    const twitchRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'twitch_viewers', gameName: game.name }) });
-                    viewerData = await twitchRes.json();
-                } catch (err) { }
-
-                renderDetailView(game, viewerData);
-            } catch (error) { detailContainer.innerHTML = '<p class="error-msg">Fehler beim Laden der Spieldetails.</p>'; }
-        }
-
-        function getGameAchievements(gameId) { return achievementsData[gameId] || []; }
-
-        function loadDefaultAchievements(gameId) {
-            const defaults = ["Erste Schritte / Prolog geschafft", "Hauptgeschichte erfolgreich abgeschlossen", "Alle Sammelobjekte / Collectibles gefunden", "Alle Nebenmissionen erledigt", "Auf dem höchsten Schwierigkeitsgrad durchgespielt", "Platin-Trophäe / 100% aller Erfolge freigeschaltet"];
-            if (!achievementsData[gameId]) achievementsData[gameId] = [];
-            defaults.forEach(text => {
-                if (!achievementsData[gameId].some(t => t.text.toLowerCase() === text.toLowerCase())) achievementsData[gameId].push({ id: Date.now() + Math.random(), text: text, completed: false });
-            });
-            localStorage.setItem('igdb_achievements', JSON.stringify(achievementsData));
-            renderDetailView(currentGameDetail);
-        }
-
-        function addAchievement(gameId) {
-            const input = document.getElementById(`new-trophy-input-${gameId}`);
-            const text = input.value.trim();
-            if (!text) return;
-            if (!achievementsData[gameId]) achievementsData[gameId] = [];
-            achievementsData[gameId].push({ id: Date.now(), text: text, completed: false });
-            localStorage.setItem('igdb_achievements', JSON.stringify(achievementsData));
-            renderDetailView(currentGameDetail);
-        }
-
-        function toggleAchievement(gameId, trophyId) {
-            if (!achievementsData[gameId]) return;
-            const trophy = achievementsData[gameId].find(t => t.id === trophyId);
-            if (trophy) { trophy.completed = !trophy.completed; localStorage.setItem('igdb_achievements', JSON.stringify(achievementsData)); renderDetailView(currentGameDetail); }
-        }
-
-        function deleteAchievement(gameId, trophyId) {
-            if (!achievementsData[gameId]) return;
-            achievementsData[gameId] = achievementsData[gameId].filter(t => t.id !== trophyId);
-            localStorage.setItem('igdb_achievements', JSON.stringify(achievementsData));
-            renderDetailView(currentGameDetail);
-        }
-
-        function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
-            const detailContainer = document.getElementById('detail-content');
-            const isFav = favorites.includes(game.id);
-            const isPlayed = played.includes(game.id);
-            const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : 'https://via.placeholder.com/400x220?text=No+Cover';
-            const ratingScore = game.rating ? (game.rating / 10).toFixed(1) : 'N/A';
-            const genresStr = game.genres ? game.genres.map(g => g.name).join(', ') : 'Unbekannt';
-            const platformsFormatted = game.platforms ? game.platforms.map(p => p.name).join(', ') : 'Unbekannt';
-            const releaseYear = game.first_release_date ? new Date(game.first_release_date * 1000).getFullYear() : 'N/A';
-
-            const trophies = getGameAchievements(game.id);
-            const completedCount = trophies.filter(t => t.completed).length;
-            const totalCount = trophies.length;
-            const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-            let trophiesHtml = trophies.map(t => `
-                <div class="trophy-item ${t.completed ? 'completed' : ''}">
-                    <input type="checkbox" ${t.completed ? 'checked' : ''} onclick="toggleAchievement(${game.id}, ${t.id})">
-                    <span>${t.text}</span>
-                    <button onclick="deleteAchievement(${game.id}, ${t.id})" style="background:none; border:none; color:#ff4757; cursor:pointer; font-size:12px;">❌</button>
-                </div>
-            `).join('');
-
-            detailContainer.innerHTML = `
-                <div class="twitch-box">
-                    <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live-Status</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
-                    <div style="text-align: right;"><div style="font-size: 11px; color: #e0d0ff;">Aktive Streams</div><span style="font-size: 14px;">📺 ${viewerData.streams} Streams</span></div>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h2 style="font-size: 20px; flex: 1;">${game.name}</h2>
-                    <div class="action-buttons" style="flex-direction: row; gap: 8px;">
-                        <button class="played-btn ${isPlayed ? 'active' : ''}" onclick="togglePlayed(event, ${game.id})" style="font-size: 24px;">🎮</button>
-                        <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, ${game.id})" style="font-size: 24px;">${isFav ? '❤️' : '♡'}</button>
-                    </div>
-                </div>
-
-                <img src="${coverUrl}" alt="${game.name}" class="detail-banner">
-                
-                <div class="trophy-section">
-                    <div class="trophy-header"><span>🏆 Trophäen & Erfolge (${completedCount}/${totalCount})</span><span>${percent}%</span></div>
-                    <div class="trophy-progress-bar"><div class="trophy-progress-fill" style="width: ${percent}%;"></div></div>
-                    <button class="btn-load-defaults" onclick="loadDefaultAchievements(${game.id})">⚡ Typische Erfolge als Vorlage laden</button>
-                    <div class="trophy-list">${trophies.length > 0 ? trophiesHtml : '<p style="color: #777; font-size: 12px; text-align: center; padding: 10px;">Noch keine Trophäen eingetragen.</p>'}</div>
-                    <div class="trophy-add-row">
-                        <input type="text" id="new-trophy-input-${game.id}" class="trophy-input" placeholder="Eigene Trophäe eingeben..." onkeydown="if(event.key==='Enter') addAchievement(${game.id})">
-                        <button class="trophy-add-btn" onclick="addAchievement(${game.id})">+ Hinzufügen</button>
-                    </div>
-                </div>
-
-                <div class="detail-info">
-                    <p><strong>Genre:</strong> ${genresStr}</p>
-                    <p><strong>Plattformen:</strong> ${platformsFormatted}</p>
-                    <p><strong>Erscheinungsjahr:</strong> ${releaseYear}</p>
-                    <p><strong>IGDB Bewertung:</strong> ⭐ ${ratingScore} / 10</p>
-                </div>
-                <h3 style="margin-bottom: 8px; font-size: 15px;">Über das Spiel:</h3>
-                <div class="detail-info"><p>${game.summary || 'Keine Beschreibung verfügbar.'}</p></div>
-            `;
-        }
-
-        function shareCurrentGame() {
-            if (!currentGameDetail) return;
-            if (navigator.share) { navigator.share({ title: currentGameDetail.name, url: window.location.href }).catch(() => {}); } 
-            else { navigator.clipboard.writeText(window.location.href); alert('Link kopiert!'); }
-        }
-
-        initApp();
-    </script>
-</body>
-</html>
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
