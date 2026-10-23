@@ -98,7 +98,12 @@
             <input type="email" id="reg-email" placeholder="E-Mail-Adresse">
             <div style="font-size: 11px; color: #aaa; margin-bottom: 4px;">Geburtsdatum:</div>
             <input type="date" id="reg-birthdate">
+            
             <input type="password" id="reg-password" placeholder="Kennwort">
+            <div style="font-size: 10px; color: #aaa; margin-top: -8px; margin-bottom: 12px; line-height: 1.3;">
+                Min. 8 Zeichen, min. 1 Zahl & 1 Sonderzeichen (z.B. !@#$%)
+            </div>
+
             <input type="password" id="reg-confirm-password" placeholder="Kennwort bestätigen">
             
             <div style="font-size: 11px; color: #aaa; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
@@ -203,6 +208,14 @@
                 errDiv.innerText = "Die Passwörter stimmen nicht überein.";
                 return;
             }
+
+            // Passwort-Validierung im Frontend
+            const passwordRegex = /^(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+            if (!passwordRegex.test(password)) {
+                errDiv.innerText = "Das Passwort muss mind. 8 Zeichen lang sein sowie eine Zahl und ein Sonderzeichen enthalten.";
+                return;
+            }
+
             if(!privacy) {
                 errDiv.innerText = "Du musst den Datenschutzrichtlinien zustimmen.";
                 return;
