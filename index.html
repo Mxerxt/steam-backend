@@ -38,7 +38,7 @@
         .onboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; margin-bottom: 30px; }
         .onboard-card { background: #1e1e1e; border-radius: 6px; padding: 5px; text-align: center; cursor: pointer; position: relative; }
         .onboard-card.selected { background: #1a2e20; box-shadow: 0 0 0 2px #2ea44f inset; }
-        .onboard-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 4px; margin-bottom: 4px; }
+        .onboard-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 4px; margin-bottom: 4px; background: #252525; }
         .onboard-card .title { font-size: 10px; font-weight: bold; display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.2; height: 24px; word-break: break-word; }
         .check-icon { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; background: rgba(0,0,0,0.8); border: 1px solid #aaa; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: transparent; }
         .onboard-card.selected .check-icon { background: #2ea44f; border-color: #2ea44f; color: #fff; }
@@ -61,7 +61,7 @@
         .detail-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .back-btn, .share-btn { background: #333; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .share-btn { background: #2b4c7e; font-size: 13px; }
-        .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; }
+        .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; background: #252525; }
         .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
         .trophy-section { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
         .trophy-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #4da6ff; margin-bottom: 10px; }
@@ -72,6 +72,7 @@
         .trophy-item input { width: 18px; height: 18px; accent-color: #2ea44f; flex-shrink: 0; cursor: pointer; }
         .twitch-box { background: linear-gradient(135deg, #9146FF, #5c16c5); border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .loading-spinner { text-align: center; margin-top: 40px; color: #888; }
+        .error-msg { text-align: center; color: #ff4757; margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 8px; font-size: 13px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -261,7 +262,7 @@
             if (currentUser.steamId) {
                 steamContent = `<span style="color: #2ea44f; font-size: 11px;">✅ Steam: ${currentUser.steamName} <button onclick="handleSteamUnlink()" style="background:none;border:none;color:#ff4757;cursor:pointer;text-decoration:underline;">(Trennen)</button></span>`;
             } else {
-                steamContent = `<a href="https://steam-backend-88lk.onrender.com/auth/steam" class="steam-btn">🎮 Steam verknüpfen</a>`;
+                steamContent = `<a href="/auth/steam" class="steam-btn">🎮 Steam verknüpfen</a>`;
             }
             header.innerHTML = `
                 <div class="user-info">
@@ -295,8 +296,16 @@
             try {
                 const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, cover.url, genres; where cover != null; sort rating_count desc; limit 80;' }) });
                 const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) { allPopularGames = data; cacheGames(data); refreshOnboardingGames(); }
-            } catch (err) {}
+                if (Array.isArray(data) && data.length > 0) { 
+                    allPopularGames = data; 
+                    cacheGames(data); 
+                    refreshOnboardingGames(); 
+                } else {
+                    document.getElementById('onboard-grid').innerHTML = '<div class="error-msg" style="grid-column: 1/-1;">Fehler: Twitch/IGDB API-Zugangsdaten auf Render fehlen oder sind ungültig!</div>';
+                }
+            } catch (err) {
+                document.getElementById('onboard-grid').innerHTML = '<div class="error-msg" style="grid-column: 1/-1;">Netzwerkfehler beim Laden der Spiele.</div>';
+            }
         }
 
         function refreshOnboardingGames() {
@@ -344,16 +353,31 @@
         async function loadMainData() {
             try {
                 const topRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; sort rating desc; limit 10;' }) });
-                top10Games = await topRes.json(); 
-                if(Array.isArray(top10Games)) { cacheGames(top10Games); displayGames(top10Games, 'top10-list', true); }
+                const topData = await topRes.json(); 
+                if(Array.isArray(topData)) { 
+                    top10Games = topData; 
+                    cacheGames(top10Games); 
+                    displayGames(top10Games, 'top10-list', true); 
+                } else {
+                    document.getElementById('top10-list').innerHTML = '<div class="error-msg">IGDB-Fehler: Bitte prüfe Twitch Client-ID / Secret auf Render.</div>';
+                }
                 
                 let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where cover != null; sort rating_count desc; limit 40;';
                 if (userPreferences && userPreferences.genreIds) catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
                 
                 let catRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: catalogQuery }) });
-                allGames = await catRes.json(); 
-                if(Array.isArray(allGames)) { cacheGames(allGames); displayGames(allGames, 'game-list'); }
-            } catch (err) {}
+                const catData = await catRes.json(); 
+                if(Array.isArray(catData)) { 
+                    allGames = catData; 
+                    cacheGames(allGames); 
+                    displayGames(allGames, 'game-list'); 
+                } else {
+                    document.getElementById('game-list').innerHTML = '<div class="error-msg">IGDB-Fehler: Bitte prüfe Twitch Client-ID / Secret auf Render.</div>';
+                }
+            } catch (err) {
+                document.getElementById('game-list').innerHTML = '<div class="error-msg">Verbindungsfehler zur IGDB-API.</div>';
+                document.getElementById('top10-list').innerHTML = '<div class="error-msg">Verbindungsfehler zur IGDB-API.</div>';
+            }
         }
 
         function switchTab(tabName) {
@@ -378,7 +402,7 @@
             const container = document.getElementById(containerId);
             container.innerHTML = '';
             if (!gamesToDisplay || gamesToDisplay.length === 0) {
-                container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 30px;">Keine Spiele gefunden.</p>';
+                container.innerHTML = '<div class="error-msg">Keine Spiele gefunden.</div>';
                 return;
             }
             gamesToDisplay.forEach((game, index) => {
@@ -401,7 +425,7 @@
         async function displaySteamLibrary() {
             const container = document.getElementById('steam-lib-list');
             if (!currentUser || !currentUser.steamId) {
-                container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Bitte verknüpfe zuerst oben dein Steam-Konto.</p>';
+                container.innerHTML = '<div class="error-msg">Bitte verknüpfe zuerst oben dein Steam-Konto.</div>';
                 return;
             }
             container.innerHTML = '<div class="loading-spinner">Lade Steam-Spiele...</div>';
@@ -411,11 +435,10 @@
                 
                 if (!data.response || !data.response.games || data.response.games.length === 0) {
                     container.innerHTML = `
-                        <div style="text-align:center; color: #ff4757; margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 8px;">
+                        <div class="error-msg">
                             <strong>Keine Spiele gefunden oder Steam-Profil ist privat!</strong><br><br>
                             <span style="color: #aaa; font-size: 12px; line-height: 1.4;">
-                                Wichtig: Gehe in Steam auf dein Profil → <em>Profil bearbeiten</em> → <em>Datenschutzeinstellungen</em>. 
-                                Stelle sicher, dass <strong>Mein Profil</strong> und <strong>Spieldetails</strong> auf <strong>Öffentlich</strong> stehen!
+                                Gehe in Steam auf Profil → <em>Profil bearbeiten</em> → <em>Datenschutzeinstellungen</em> und stelle <strong>Mein Profil</strong> & <strong>Spieldetails</strong> auf <strong>Öffentlich</strong>!
                             </span>
                         </div>`;
                     return;
@@ -441,7 +464,7 @@
                     container.appendChild(card);
                 });
             } catch (e) {
-                container.innerHTML = '<p style="text-align:center; color: #ff4757; margin-top: 40px;">Fehler beim Laden der Steam-Bibliothek.</p>';
+                container.innerHTML = '<div class="error-msg">Fehler beim Laden der Steam-Bibliothek.</div>';
             }
         }
 
@@ -486,150 +509,3 @@
                 } catch(e){}
             }
             displayGames(playedGames, 'played-list');
-        }
-
-        async function openGameDetail(gameId) {
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails & Steam-Erfolge...</div>';
-
-            try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = ${gameId};` }) });
-                const data = await res.json(); 
-                if (!data || data.length === 0) throw new Error('Spiel nicht gefunden');
-                currentGameDetail = data[0]; 
-                cacheGame(currentGameDetail);
-
-                let viewerData = { viewers: 0, streams: 0 };
-                try { 
-                    const tRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'twitch_viewers', gameName: currentGameDetail.name }) }); 
-                    viewerData = await tRes.json(); 
-                } catch (e) {}
-
-                let steamAppId = null;
-                if (currentGameDetail.websites) {
-                    const steamSite = currentGameDetail.websites.find(w => w.category === 13);
-                    if (steamSite && steamSite.url) {
-                        const match = steamSite.url.match(/\/app\/([0-9]+)/);
-                        if (match) steamAppId = match[1];
-                    }
-                }
-
-                let steamAchievements = [];
-                if (steamAppId && currentUser && currentUser.steamId) {
-                    try {
-                        const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${steamAppId}`);
-                        const achData = await achRes.json();
-                        if (achData && achData.achievements) steamAchievements = achData.achievements;
-                    } catch (e) {}
-                }
-
-                renderDetailView(currentGameDetail, viewerData, steamAchievements, steamAppId);
-            } catch (e) {
-                document.getElementById('detail-content').innerHTML = '<p style="text-align:center; color:#ff4757; margin-top:40px;">Fehler beim Laden.</p>';
-            }
-        }
-
-        async function openSteamGameDetail(appid, encodedName) {
-            const gameName = decodeURIComponent(encodedName);
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Steam-Erfolge...</div>';
-
-            let steamAchievements = [];
-            if (currentUser && currentUser.steamId) {
-                try {
-                    const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${appid}`);
-                    const achData = await achRes.json();
-                    if (achData && achData.achievements) steamAchievements = achData.achievements;
-                } catch (e) {}
-            }
-
-            let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, id: 'steam_' + appid };
-            renderDetailView(fakeGame, { viewers: 0, streams: 0 }, steamAchievements, appid);
-        }
-
-        function toggleSteamAchievement(gameId, apiname) {
-            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${gameId}`)) || {};
-            const current = localAchState[apiname] !== undefined ? localAchState[apiname] : false;
-            localAchState[apiname] = !current;
-            localStorage.setItem(`steam_ach_${gameId}`, JSON.stringify(localAchState));
-            
-            if (currentGameDetail && currentGameDetail.id === gameId) {
-                openGameDetail(currentGameDetail.id);
-            } else {
-                location.reload();
-            }
-        }
-
-        function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }, steamAchievements = [], steamAppId = null) {
-            const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
-            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${game.id}`)) || {};
-            
-            const totalCount = steamAchievements.length;
-            const completedCount = steamAchievements.filter(a => localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved).length;
-            const perc = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-            let achievementsHtml = '';
-            if (!currentUser || !currentUser.steamId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto.</p>';
-            } else if (!steamAppId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam AppID gefunden.</p>';
-            } else if (totalCount === 0) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Erfolge gefunden oder Profil ist privat.</p>';
-            } else {
-                achievementsHtml = steamAchievements.map(a => {
-                    const isDone = localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved;
-                    return `
-                        <div class="trophy-item ${isDone ? 'completed' : ''}">
-                            <input type="checkbox" ${isDone ? 'checked' : ''} onclick="toggleSteamAchievement('${game.id}', '${a.apiname}')">
-                            <div style="flex: 1;">
-                                <div style="font-weight: bold; font-size: 13px;">${a.name}</div>
-                                <div style="font-size: 11px; color: #aaa;">${a.description}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            document.getElementById('detail-content').innerHTML = `
-                <div class="twitch-box">
-                    <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
-                    <div style="text-align: right;"><div style="font-size: 11px; color: #e0d0ff;">Streams</div><span>📺 ${viewerData.streams} Streams</span></div>
-                </div>
-
-                <div style="display: flex; justify-content: space-name; align-items: center; margin-bottom: 10px;">
-                    <h2 style="font-size: 20px;">${game.name}</h2>
-                </div>
-
-                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
-                
-                <div class="trophy-section">
-                    <div class="trophy-header">
-                        <span>🏆 Steam Erfolge (${completedCount}/${totalCount})</span>
-                        <span>${perc}%</span>
-                    </div>
-                    <div class="trophy-progress-bar"><div class="trophy-progress-fill" style="width: ${perc}%;"></div></div>
-                    <div class="trophy-list" style="max-height: 300px; overflow-y: auto;">${achievementsHtml}</div>
-                </div>
-
-                <div class="detail-info">
-                    <p><strong>Genre:</strong> ${game.genres && game.genres.length ? game.genres.map(g => g.name).join(', ') : '-'}</p>
-                    <p><strong>Plattformen:</strong> ${game.platforms && game.platforms.length ? game.platforms.map(p => p.name).join(', ') : '-'}</p>
-                    <p><strong>Erscheinungsjahr:</strong> ${game.first_release_date ? new Date(game.first_release_date * 1000).getFullYear() : '-'}</p>
-                    <p><strong>IGDB Bewertung:</strong> ⭐ ${game.rating ? (game.rating/10).toFixed(1) : '-'} / 10</p>
-                </div>
-                ${game.summary ? `<h3 style="margin-bottom: 8px; font-size: 15px;">Über das Spiel:</h3><div class="detail-info"><p>${game.summary}</p></div>` : ''}
-            `;
-        }
-
-        function shareCurrentGame() {
-            if (!currentGameDetail) return;
-            if (navigator.share) { navigator.share({ title: currentGameDetail.name, url: window.location.href }).catch(() => {}); } 
-            else { navigator.clipboard.writeText(window.location.href); alert('Link kopiert!'); }
-        }
-
-        checkSessionOnLoad();
-    </script>
-</body>
-</html>
