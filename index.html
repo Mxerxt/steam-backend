@@ -47,7 +47,7 @@
         .btn-submit-onboard.active { background: #2ea44f; color: white; cursor: pointer; }
 
         .game-card { background: #1e1e1e; padding: 12px; margin-bottom: 15px; border-radius: 10px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
-        .game-card img { width: 70px; height: 90px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+        .game-card img { width: 70px; height: 90px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #252525; }
         .game-info { flex: 1; overflow: hidden; }
         .game-title { font-size: 15px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .game-meta { font-size: 12px; color: #aaa; margin-bottom: 6px; }
@@ -114,7 +114,6 @@
         
         <div class="user-header" id="user-header"></div>
 
-        <!-- ERWEITERTE TABS INKLUSIVE STEAM-BIBLIOTHEK -->
         <div class="nav-tabs">
             <div class="tab-btn" id="tabCatalog" onclick="switchTab('catalog')">🎮 Katalog</div>
             <div class="tab-btn" id="tabTop10" onclick="switchTab('top10')">🔥 Top 10</div>
@@ -134,7 +133,6 @@
         <div id="viewFavorites" class="view"><div id="favorites-list"><div class="loading-spinner">Lade...</div></div></div>
         <div id="viewPlayed" class="view"><div id="played-list"><div class="loading-spinner">Lade...</div></div></div>
         
-        <!-- STEAM BIBLIOTHEK ANSICHT -->
         <div id="viewSteamLib" class="view">
             <div id="steam-lib-list"><div class="loading-spinner">Lade Steam-Spiele...</div></div>
         </div>
@@ -144,7 +142,7 @@
                 <button class="back-btn" onclick="goBack()">← Zurück</button>
                 <button class="share-btn" onclick="shareCurrentGame()">📤 Teilen</button>
             </div>
-            <div id="detail-content"><div class="loading-spinner">Lade Spieldetails & Steam-Erfolge...</div></div>
+            <div id="detail-content"><div class="loading-spinner">Lade Spieldetails...</div></div>
         </div>
     </div>
 
@@ -297,7 +295,7 @@
             try {
                 const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, cover.url, genres; where cover != null; sort rating_count desc; limit 80;' }) });
                 const data = await res.json();
-                if (data.length > 0) { allPopularGames = data; cacheGames(data); refreshOnboardingGames(); }
+                if (Array.isArray(data) && data.length > 0) { allPopularGames = data; cacheGames(data); refreshOnboardingGames(); }
             } catch (err) {}
         }
 
@@ -346,13 +344,15 @@
         async function loadMainData() {
             try {
                 const topRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; sort rating desc; limit 10;' }) });
-                top10Games = await topRes.json(); cacheGames(top10Games); displayGames(top10Games, 'top10-list', true);
+                top10Games = await topRes.json(); 
+                if(Array.isArray(top10Games)) { cacheGames(top10Games); displayGames(top10Games, 'top10-list', true); }
                 
                 let catalogQuery = 'fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where cover != null; sort rating_count desc; limit 40;';
                 if (userPreferences && userPreferences.genreIds) catalogQuery = `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where genres = (${userPreferences.genreIds.join(',')}) & cover != null; sort rating_count desc; limit 40;`;
                 
                 let catRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: catalogQuery }) });
-                allGames = await catRes.json(); cacheGames(allGames); displayGames(allGames, 'game-list');
+                allGames = await catRes.json(); 
+                if(Array.isArray(allGames)) { cacheGames(allGames); displayGames(allGames, 'game-list'); }
             } catch (err) {}
         }
 
@@ -377,14 +377,18 @@
         function displayGames(gamesToDisplay, containerId, isTop10List = false) {
             const container = document.getElementById(containerId);
             container.innerHTML = '';
+            if (!gamesToDisplay || gamesToDisplay.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color: #888; margin-top: 30px;">Keine Spiele gefunden.</p>';
+                return;
+            }
             gamesToDisplay.forEach((game, index) => {
                 const isFav = favorites.includes(game.id), isPlayed = played.includes(game.id);
-                const coverUrl = game.cover ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_small') : 'https://via.placeholder.com/70x90';
+                const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_small') : 'https://via.placeholder.com/70x90';
                 const card = document.createElement('div'); card.className = 'game-card';
                 card.innerHTML = `<img src="${coverUrl}" onclick="openGameDetail(${game.id})">
                     <div class="game-info" onclick="openGameDetail(${game.id})">
                         <div class="game-title">${isTop10List ? `#${index + 1} ` : ''}${game.name}</div>
-                        <div class="game-meta">${game.genres ? game.genres[0].name : 'Spiel'} • ⭐ ${game.rating ? (game.rating/10).toFixed(1) : '-'}</div>
+                        <div class="game-meta">${game.genres && game.genres[0] ? game.genres[0].name : 'Spiel'} • ⭐ ${game.rating ? (game.rating/10).toFixed(1) : '-'}</div>
                     </div>
                     <div class="action-buttons">
                         <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, ${game.id})">${isFav ? '❤️' : '♡'}</button>
@@ -397,17 +401,26 @@
         async function displaySteamLibrary() {
             const container = document.getElementById('steam-lib-list');
             if (!currentUser || !currentUser.steamId) {
-                container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Bitte verknüpfe zuerst oben dein Steam-Konto, um deine Steam-Bibliothek zu sehen.</p>';
+                container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Bitte verknüpfe zuerst oben dein Steam-Konto.</p>';
                 return;
             }
             container.innerHTML = '<div class="loading-spinner">Lade Steam-Spiele...</div>';
             try {
                 const res = await fetch(`/api/owned-games?steamid=${currentUser.steamId}`);
                 const data = await res.json();
-                if (!data.response || !data.response.games) {
-                    container.innerHTML = '<p style="text-align:center; color: #aaa; margin-top: 40px;">Keine Spiele gefunden oder Steam-Profil ist privat.</p>';
+                
+                if (!data.response || !data.response.games || data.response.games.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align:center; color: #ff4757; margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 8px;">
+                            <strong>Keine Spiele gefunden oder Steam-Profil ist privat!</strong><br><br>
+                            <span style="color: #aaa; font-size: 12px; line-height: 1.4;">
+                                Wichtig: Gehe in Steam auf dein Profil → <em>Profil bearbeiten</em> → <em>Datenschutzeinstellungen</em>. 
+                                Stelle sicher, dass <strong>Mein Profil</strong> und <strong>Spieldetails</strong> auf <strong>Öffentlich</strong> stehen!
+                            </span>
+                        </div>`;
                     return;
                 }
+                
                 steamLibraryGames = data.response.games;
                 container.innerHTML = '';
                 
@@ -428,7 +441,7 @@
                     container.appendChild(card);
                 });
             } catch (e) {
-                container.innerHTML = '<p class="error-msg">Fehler beim Laden der Steam-Bibliothek.</p>';
+                container.innerHTML = '<p style="text-align:center; color: #ff4757; margin-top: 40px;">Fehler beim Laden der Steam-Bibliothek.</p>';
             }
         }
 
@@ -437,7 +450,8 @@
             if (!query) return displayGames(allGames, 'game-list');
             try {
                 const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `search "${query}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; limit 20;` }) });
-                const results = await res.json(); cacheGames(results); displayGames(results, 'game-list');
+                const results = await res.json(); 
+                if(Array.isArray(results)) { cacheGames(results); displayGames(results, 'game-list'); }
             } catch (e) {}
         }
 
@@ -452,8 +466,11 @@
             let favGames = favorites.map(id => gameCache[id]).filter(g => g);
             const missing = favorites.filter(id => !gameCache[id]);
             if (missing.length > 0) {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
-                const fetched = await res.json(); cacheGames(fetched); fetched.forEach(g => favGames.push(g));
+                try {
+                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
+                    const fetched = await res.json(); 
+                    if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => favGames.push(g)); }
+                } catch(e){}
             }
             displayGames(favGames, 'favorites-list');
         }
@@ -462,8 +479,11 @@
             let playedGames = played.map(id => gameCache[id]).filter(g => g);
             const missing = played.filter(id => !gameCache[id]);
             if (missing.length > 0) {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
-                const fetched = await res.json(); cacheGames(fetched); fetched.forEach(g => playedGames.push(g));
+                try {
+                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = (${missing.join(',')});` }) });
+                    const fetched = await res.json(); 
+                    if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => playedGames.push(g)); }
+                } catch(e){}
             }
             displayGames(playedGames, 'played-list');
         }
@@ -506,7 +526,7 @@
 
                 renderDetailView(currentGameDetail, viewerData, steamAchievements, steamAppId);
             } catch (e) {
-                document.getElementById('detail-content').innerHTML = '<p class="error-msg">Fehler beim Laden.</p>';
+                document.getElementById('detail-content').innerHTML = '<p style="text-align:center; color:#ff4757; margin-top:40px;">Fehler beim Laden.</p>';
             }
         }
 
@@ -552,11 +572,11 @@
 
             let achievementsHtml = '';
             if (!currentUser || !currentUser.steamId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto, um deine Steam-Erfolge zu sehen.</p>';
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto.</p>';
             } else if (!steamAppId) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Für dieses Spiel wurde keine Steam AppID gefunden.</p>';
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam AppID gefunden.</p>';
             } else if (totalCount === 0) {
-                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam-Erfolge gefunden oder das Profil ist privat.</p>';
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Erfolge gefunden oder Profil ist privat.</p>';
             } else {
                 achievementsHtml = steamAchievements.map(a => {
                     const isDone = localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved;
@@ -578,7 +598,7 @@
                     <div style="text-align: right;"><div style="font-size: 11px; color: #e0d0ff;">Streams</div><span>📺 ${viewerData.streams} Streams</span></div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-name; align-items: center; margin-bottom: 10px;">
                     <h2 style="font-size: 20px;">${game.name}</h2>
                 </div>
 
