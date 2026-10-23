@@ -147,7 +147,21 @@ app.get('/auth/steam/return',
     }
 );
 
-// Steam Erfolge + Schema abrufen
+// 1. Steam Bibliothek (Owned Games) abrufen
+app.get('/api/owned-games', async (req, res) => {
+    const { steamid } = req.query;
+    if (!steamid) return res.status(400).json({ error: 'steamid fehlt' });
+    if (!STEAM_API_KEY) return res.status(500).json({ error: 'STEAM_API_KEY fehlt' });
+    
+    try {
+        const response = await axios.get(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${STEAM_API_KEY}&steamid=${steamid}&include_appinfo=true&include_played_free_games=true&format=json`);
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Bibliothek. Profil evtl. privat.' });
+    }
+});
+
+// 2. Steam Erfolge + Schema abrufen
 app.get('/api/achievements', async (req, res) => {
     const { steamid, appid } = req.query;
     if (!steamid || !appid) return res.status(400).json({ error: 'steamid und appid fehlen' });
