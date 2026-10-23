@@ -147,7 +147,7 @@ app.get('/auth/steam/return',
     }
 );
 
-// 1. Steam Bibliothek (Owned Games) abrufen
+// Steam Bibliothek abrufen
 app.get('/api/owned-games', async (req, res) => {
     const { steamid } = req.query;
     if (!steamid) return res.status(400).json({ error: 'steamid fehlt' });
@@ -157,11 +157,11 @@ app.get('/api/owned-games', async (req, res) => {
         const response = await axios.get(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${STEAM_API_KEY}&steamid=${steamid}&include_appinfo=true&include_played_free_games=true&format=json`);
         res.json(response.data);
     } catch (error) {
-        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Bibliothek. Profil evtl. privat.' });
+        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Bibliothek.' });
     }
 });
 
-// 2. Steam Erfolge + Schema abrufen
+// Steam Erfolge abrufen
 app.get('/api/achievements', async (req, res) => {
     const { steamid, appid } = req.query;
     if (!steamid || !appid) return res.status(400).json({ error: 'steamid und appid fehlen' });
@@ -189,7 +189,7 @@ app.get('/api/achievements', async (req, res) => {
 
         res.json({ achievements: merged, success: true });
     } catch (error) {
-        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge. Profil evtl. privat oder Spiel hat keine Erfolge.' });
+        res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge.' });
     }
 });
 
