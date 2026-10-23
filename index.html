@@ -68,6 +68,9 @@
         .screenshots-container::-webkit-scrollbar { height: 6px; }
         .screenshots-container::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
+        .steam-link-btn { display: block; background: #171a21; color: #fff; text-align: center; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 15px; border: 1px solid #444; }
+        .steam-link-btn:hover { background: #21262d; border-color: #666; }
+
         .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
         .twitch-box { background: linear-gradient(135deg, #9146FF, #5c16c5); border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .loading-spinner { text-align: center; margin-top: 40px; color: #888; }
@@ -593,6 +596,16 @@
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
             const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
 
+            // Steam Store Link ermitteln
+            let steamUrl = '';
+            if (game.id && String(game.id).startsWith('steam_')) {
+                const appid = String(game.id).replace('steam_', '');
+                steamUrl = `https://store.steampowered.com/app/${appid}`;
+            } else if (game.websites) {
+                const steamSite = game.websites.find(w => w.category === 13 || (w.url && w.url.includes('store.steampowered.com')));
+                if (steamSite) steamUrl = steamSite.url;
+            }
+
             // Video-Trailer
             let videoHtml = '';
             if (game.videos && game.videos.length > 0) {
@@ -612,6 +625,12 @@
                 `;
             }
 
+            // Steam Button HTML
+            let steamButtonHtml = '';
+            if (steamUrl) {
+                steamButtonHtml = `<a href="${steamUrl}" target="_blank" class="steam-link-btn">🛒 Auf Steam ansehen ↗</a>`;
+            }
+
             document.getElementById('detail-content').innerHTML = `
                 <div class="twitch-box">
                     <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
@@ -623,6 +642,7 @@
                 </div>
 
                 ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
+                ${steamButtonHtml}
                 ${videoHtml}
                 ${screenshotsHtml}
 
