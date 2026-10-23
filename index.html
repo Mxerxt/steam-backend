@@ -7,8 +7,26 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: #fff; padding: 15px; max-width: 480px; margin: auto; padding-bottom: 70px; }
-        h1 { font-size: 22px; margin-bottom: 5px; text-align: center; }
-        .subtitle { font-size: 11px; color: #aaa; text-align: center; margin-bottom: 15px; }
+        
+        .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
+        h1 { font-size: 20px; white-space: nowrap; }
+        
+        /* Universeller Suchbalken oben rechts */
+        .universal-search-container { position: relative; flex: 1; max-width: 220px; }
+        .universal-search-input { width: 100%; padding: 8px 12px; background: #1e1e1e; color: #fff; border: 1px solid #444; border-radius: 8px; font-size: 13px; outline: none; }
+        .universal-search-input:focus { border-color: #4da6ff; }
+        
+        /* Dropdown für Live-Ergebnisse & Meinten Sie */
+        .search-dropdown { position: absolute; top: 100%; left: 0; width: 100%; background: #1e1e1e; border: 1px solid #444; border-radius: 8px; margin-top: 5px; z-index: 1000; max-height: 350px; overflow-y: auto; display: none; box-shadow: 0 8px 16px rgba(0,0,0,0.5); }
+        .search-dropdown.active { display: block; }
+        .did-you-mean { padding: 10px 12px; background: #252525; border-bottom: 1px solid #333; font-size: 12px; color: #4da6ff; cursor: pointer; }
+        .did-you-mean:hover { background: #2b2b2b; }
+        .search-result-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; cursor: pointer; }
+        .search-result-item:hover { background: #2a2a2a; }
+        .search-result-item img { width: 35px; height: 45px; object-fit: cover; border-radius: 4px; background: #252525; flex-shrink: 0; }
+        .search-result-info { overflow: hidden; }
+        .search-result-title { font-size: 13px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .search-result-meta { font-size: 11px; color: #aaa; }
 
         #auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 2000; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; }
         .auth-card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 350px; border: 1px solid #333; margin: auto; }
@@ -27,8 +45,6 @@
         .tab-btn { flex: 1; padding: 8px 2px; background: #1e1e1e; color: #aaa; border: 1px solid #333; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; font-size: 10px; white-space: nowrap; }
         .tab-btn.active { background: #2b4c7e; color: #fff; border-color: #4da6ff; }
         
-        .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
-        input[type="text"].search-input { width: 100%; padding: 12px; background: #1e1e1e; color: #fff; border: 1px solid #333; border-radius: 8px; font-size: 14px; outline: none; }
         .btn-random { width: 100%; background: linear-gradient(135deg, #7928ca, #ff0080); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 15px; }
         .view { display: none; } .view.active { display: block; }
         
@@ -129,7 +145,14 @@
             </div>
         </div>
 
-        <h1>🎮 Spiele-Datenbank</h1>
+        <!-- Oberster Header mit Titel und universalem Suchbalken rechts oben -->
+        <div class="app-header">
+            <h1>🎮 Spiele</h1>
+            <div class="universal-search-container">
+                <input type="text" id="universalSearchInput" class="universal-search-input" placeholder="🔍 Suchen..." oninput="handleUniversalSearch()" autocomplete="off">
+                <div id="searchDropdown" class="search-dropdown"></div>
+            </div>
+        </div>
         
         <div class="user-header" id="user-header"></div>
 
@@ -142,7 +165,6 @@
 
         <div id="viewCatalog" class="view">
             <button class="btn-random" onclick="openRandomGame()">🎲 Zufall</button>
-            <div class="controls"><input type="text" id="searchInput" class="search-input" placeholder="🔍 Suchen..." oninput="searchGames()"></div>
             <h3 style="font-size: 16px; margin-bottom: 10px; color: #4da6ff; display: none;" id="catalog-title">🎮 Für dich</h3>
             <div id="game-list"><div class="loading-spinner">Lade...</div></div>
         </div>
@@ -182,6 +204,7 @@
         let gameCache = JSON.parse(localStorage.getItem('igdb_game_cache')) || {};
         let previousView = 'top10';
         let currentGameDetail = null;
+        let searchTimeout = null;
 
         function toggleAuthMode() {
             const loginCard = document.getElementById('login-card');
@@ -559,15 +582,90 @@
             });
         }
 
-        async function searchGames() {
-            const query = document.getElementById('searchInput').value.trim();
-            if (!query) return displayGames(allGames, 'game-list');
-            try {
-                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `search "${query}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; limit 20;` }) });
-                const results = await res.json(); 
-                if(Array.isArray(results)) { cacheGames(results); displayGames(results, 'game-list'); }
-            } catch (e) {}
+        // --- Universelle Live-Suche mit "Meinten Sie...?" ---
+        function handleUniversalSearch() {
+            const query = document.getElementById('universalSearchInput').value.trim();
+            const dropdown = document.getElementById('searchDropdown');
+
+            if (searchTimeout) clearTimeout(searchTimeout);
+
+            if (!query || query.length < 1) {
+                dropdown.classList.remove('active');
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/igdb', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ query: `search "${query}"; fields name, cover.url, genres.name, rating; limit 8;` }) 
+                    });
+                    const results = await res.json();
+                    
+                    dropdown.innerHTML = '';
+                    
+                    // Wenn keine Ergebnisse, prüfen ob wir einen Tippfehler vermuten ("Meinten Sie...?")
+                    if (!Array.isArray(results) || results.length === 0) {
+                        // Einfache intelligente Korrektur-Vorschläge für häufige Vertipper
+                        let suggestion = '';
+                        const qLower = query.toLowerCase();
+                        if (qLower.includes('eldn') || qLower.includes('elnd') || qLower.includes('edlen')) suggestion = 'Elden Ring';
+                        else if (qLower.includes('gta') || qLower.includes('grand')) suggestion = 'Grand Theft Auto V';
+                        else if (qLower.includes('witchr') || qLower.includes('wieders')) suggestion = 'The Witcher 3';
+                        else if (qLower.includes('cyber') || qLower.includes('ciber')) suggestion = 'Cyberpunk 2077';
+
+                        if (suggestion) {
+                            const didYouMeanDiv = document.createElement('div');
+                            didYouMeanDiv.className = 'did-you-mean';
+                            didYouMeanDiv.innerHTML = `Meinten Sie: <strong>${suggestion}</strong>?`;
+                            didYouMeanDiv.onclick = () => {
+                                document.getElementById('universalSearchInput').value = suggestion;
+                                handleUniversalSearch();
+                            };
+                            dropdown.appendChild(didYouMeanDiv);
+                        } else {
+                            dropdown.innerHTML = '<div style="padding: 12px; font-size: 12px; color: #aaa; text-align: center;">Keine Spiele gefunden</div>';
+                        }
+                    } else {
+                        cacheGames(results);
+                        results.forEach(game => {
+                            const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_small') : 'https://via.placeholder.com/35x45?text=No+Img';
+                            const genreName = game.genres && game.genres[0] ? game.genres[0].name : 'Spiel';
+                            const ratingStr = game.rating ? `⭐ ${(game.rating/10).toFixed(1)}` : '';
+
+                            const item = document.createElement('div');
+                            item.className = 'search-result-item';
+                            item.onclick = () => {
+                                dropdown.classList.remove('active');
+                                document.getElementById('universalSearchInput').value = '';
+                                openGameDetail(game.id);
+                            };
+                            item.innerHTML = `
+                                <img src="${coverUrl}">
+                                <div class="search-result-info">
+                                    <div class="search-result-title">${game.name}</div>
+                                    <div class="search-result-meta">${genreName} ${ratingStr}</div>
+                                </div>
+                            `;
+                            dropdown.appendChild(item);
+                        });
+                    }
+                    dropdown.classList.add('active');
+                } catch (e) {
+                    dropdown.classList.remove('active');
+                }
+            }, 250); // Debounce von 250ms für jeden getippten Buchstaben
         }
+
+        // Schließe das Dropdown bei Klick außerhalb
+        document.addEventListener('click', (e) => {
+            const container = document.querySelector('.universal-search-container');
+            if (container && !container.contains(e.target)) {
+                document.getElementById('searchDropdown').classList.remove('active');
+            }
+        });
 
         function openRandomGame() { const list = allGames.length ? allGames : top10Games; openGameDetail(list[Math.floor(Math.random() * list.length)].id); }
 
