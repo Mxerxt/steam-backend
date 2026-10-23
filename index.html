@@ -518,7 +518,6 @@
                 return;
             }
 
-            // Sortieren nach Auswahl
             currentPlayedGames.sort((a, b) => {
                 const timeA = a.playtime_forever || 0;
                 const timeB = b.playtime_forever || 0;
@@ -539,7 +538,8 @@
 
             container.innerHTML = '';
             currentPlayedGames.forEach(game => {
-                const iconUrl = game.img_icon_url ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg` : 'https://via.placeholder.com/70x90';
+                // Verwende hochauflösende Steam Bibliothek-Bilder statt verpixelter Icons
+                const highResUrl = game.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/library_600x900.jpg` : 'https://via.placeholder.com/70x90';
                 
                 const totalMinutes = game.playtime_forever || 0;
                 const hours = Math.floor(totalMinutes / 60);
@@ -557,7 +557,7 @@
                 const card = document.createElement('div');
                 card.className = 'game-card';
                 card.innerHTML = `
-                    <img src="${iconUrl}" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                    <img src="${highResUrl}" onerror="this.src='https://via.placeholder.com/70x90?text=No+Img'" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                     <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                         <div class="game-title">${game.name}</div>
                         <div class="game-meta">Gespielt: ${playtimeStr}</div>
@@ -594,13 +594,13 @@
                 container.innerHTML = '';
                 
                 steamLibraryGames.forEach(game => {
-                    const iconUrl = game.img_icon_url ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg` : 'https://via.placeholder.com/70x90';
+                    const highResUrl = game.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/library_600x900.jpg` : 'https://via.placeholder.com/70x90';
                     const playtimeHours = (game.playtime_forever / 60).toFixed(1);
                     
                     const card = document.createElement('div');
                     card.className = 'game-card';
                     card.innerHTML = `
-                        <img src="${iconUrl}" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                        <img src="${highResUrl}" onerror="this.src='https://via.placeholder.com/70x90?text=No+Img'" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                         <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                             <div class="game-title">${game.name}</div>
                             <div class="game-meta">Spielzeit: ${playtimeHours} Std.</div>
@@ -626,8 +626,33 @@
 
         function openRandomGame() { const list = allGames.length ? allGames : top10Games; openGameDetail(list[Math.floor(Math.random() * list.length)].id); }
 
-        function toggleFavorite(e, id) { e.stopPropagation(); favorites.includes(id) ? favorites.splice(favorites.indexOf(id), 1) : favorites.push(id); localStorage.setItem('igdb_favorites', JSON.stringify(favorites)); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
-        function togglePlayed(e, id) { e.stopPropagation(); played.includes(id) ? played.splice(played.indexOf(id), 1) : played.push(id); localStorage.setItem('igdb_played', JSON.stringify(played)); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
+        function toggleFavorite(e, id) {
+            e.stopPropagation();
+            const index = favorites.indexOf(id);
+            if (index > -1) {
+                favorites.splice(index, 1);
+                alert("❌ Aus Favoriten entfernt!");
+            } else {
+                favorites.push(id);
+                alert("❤️ Erfolgreich zu Favoriten hinzugefügt!");
+            }
+            localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
+            location.reload(); // Seite neu laden mit Bestätigung
+        }
+
+        function togglePlayed(e, id) {
+            e.stopPropagation();
+            const index = played.indexOf(id);
+            if (index > -1) {
+                played.splice(index, 1);
+                alert("❌ Aus Gespielt entfernt!");
+            } else {
+                played.push(id);
+                alert("🎮 Erfolgreich als Gespielt markiert!");
+            }
+            localStorage.setItem('igdb_played', JSON.stringify(played));
+            location.reload(); // Seite neu laden mit Bestätigung
+        }
 
         async function displayFavorites() {
             let favGames = favorites.map(id => gameCache[id]).filter(g => g);
