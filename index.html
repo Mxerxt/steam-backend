@@ -10,13 +10,13 @@
         h1 { font-size: 22px; margin-bottom: 5px; text-align: center; }
         .subtitle { font-size: 11px; color: #aaa; text-align: center; margin-bottom: 15px; }
 
-        #auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 2000; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .auth-card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 350px; border: 1px solid #333; }
-        .auth-card input { width: 100%; padding: 12px; margin-bottom: 15px; background: #121212; border: 1px solid #444; border-radius: 6px; color: white; outline: none; }
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 2000; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; }
+        .auth-card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 350px; border: 1px solid #333; margin: auto; }
+        .auth-card input[type="text"], .auth-card input[type="email"], .auth-card input[type="password"], .auth-card input[type="date"] { width: 100%; padding: 12px; margin-bottom: 12px; background: #121212; border: 1px solid #444; border-radius: 6px; color: white; outline: none; }
         .auth-card input:focus { border-color: #4da6ff; }
         .auth-card button { width: 100%; background: #2ea44f; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
         .auth-card .toggle-link { color: #4da6ff; font-size: 12px; text-align: center; cursor: pointer; display: block; }
-        #auth-error { color: #ff4757; font-size: 12px; text-align: center; margin-bottom: 10px; min-height: 15px; }
+        #auth-error, #reg-error { color: #ff4757; font-size: 12px; text-align: center; margin-bottom: 10px; min-height: 15px; }
 
         .user-header { background: #1e1e1e; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .user-info { display: flex; flex-direction: column; gap: 5px; }
@@ -79,20 +79,33 @@
 
     <div id="auth-overlay">
         <h1 style="margin-bottom: 20px;">🎮 Game Vault</h1>
+        
+        <!-- Login Card -->
         <div class="auth-card" id="login-card">
             <h3 style="margin-bottom: 15px; text-align: center;">Anmelden</h3>
             <div id="auth-error"></div>
-            <input type="text" id="login-username" placeholder="Benutzername">
-            <input type="password" id="login-password" placeholder="Passwort">
+            <input type="text" id="login-username" placeholder="Benutzername oder E-Mail">
+            <input type="password" id="login-password" placeholder="Kennwort">
             <button onclick="handleLogin()">Einloggen</button>
             <span class="toggle-link" onclick="toggleAuthMode()">Noch keinen Account? Registrieren</span>
         </div>
         
+        <!-- Register Card -->
         <div class="auth-card" id="register-card" style="display: none;">
             <h3 style="margin-bottom: 15px; text-align: center;">Registrieren</h3>
-            <div id="reg-error" style="color: #ff4757; font-size: 12px; text-align: center; margin-bottom: 10px; min-height: 15px;"></div>
-            <input type="text" id="reg-username" placeholder="Wunsch-Benutzername">
-            <input type="password" id="reg-password" placeholder="Sicheres Passwort">
+            <div id="reg-error"></div>
+            <input type="text" id="reg-username" placeholder="Benutzername">
+            <input type="email" id="reg-email" placeholder="E-Mail-Adresse">
+            <div style="font-size: 11px; color: #aaa; margin-bottom: 4px;">Geburtsdatum:</div>
+            <input type="date" id="reg-birthdate">
+            <input type="password" id="reg-password" placeholder="Kennwort">
+            <input type="password" id="reg-confirm-password" placeholder="Kennwort bestätigen">
+            
+            <div style="font-size: 11px; color: #aaa; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="reg-privacy" style="width: 16px; height: 16px; accent-color: #2ea44f; cursor: pointer;">
+                <label for="reg-privacy" style="cursor: pointer;">Ich akzeptiere die Datenschutzrichtlinie</label>
+            </div>
+
             <button onclick="handleRegister()">Account erstellen</button>
             <span class="toggle-link" onclick="toggleAuthMode()">Bereits registriert? Einloggen</span>
         </div>
@@ -160,6 +173,8 @@
         function toggleAuthMode() {
             const loginCard = document.getElementById('login-card');
             const regCard = document.getElementById('register-card');
+            document.getElementById('reg-error').innerText = '';
+            document.getElementById('auth-error').innerText = '';
             if (loginCard.style.display === 'none') {
                 loginCard.style.display = 'block';
                 regCard.style.display = 'none';
@@ -170,31 +185,54 @@
         }
 
         async function handleRegister() {
-            const user = document.getElementById('reg-username').value.trim();
-            const pass = document.getElementById('reg-password').value;
+            const username = document.getElementById('reg-username').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const birthdate = document.getElementById('reg-birthdate').value;
+            const password = document.getElementById('reg-password').value;
+            const confirmPassword = document.getElementById('reg-confirm-password').value;
+            const privacy = document.getElementById('reg-privacy').checked;
             const errDiv = document.getElementById('reg-error');
-            if(!user || !pass) { errDiv.innerText = "Bitte fülle alle Felder aus."; return; }
+            
+            errDiv.innerText = '';
+
+            if(!username || !email || !birthdate || !password || !confirmPassword) { 
+                errDiv.innerText = "Bitte fülle alle Pflichtfelder aus."; 
+                return; 
+            }
+            if(password !== confirmPassword) {
+                errDiv.innerText = "Die Passwörter stimmen nicht überein.";
+                return;
+            }
+            if(!privacy) {
+                errDiv.innerText = "Du musst den Datenschutzrichtlinien zustimmen.";
+                return;
+            }
+
             try {
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user, password: pass })
+                    body: JSON.stringify({ username, email, password, confirmPassword, birthdate, privacy })
                 });
                 const data = await res.json();
-                if (data.error) { errDiv.innerText = data.error; } 
-                else {
+                if (data.error) { 
+                    errDiv.innerText = data.error; 
+                } else {
                     currentUser = { username: data.username, steamId: null };
                     localStorage.setItem('local_logged_in', 'true');
                     localStorage.setItem('local_username', data.username);
                     startApp();
                 }
-            } catch (e) { errDiv.innerText = "Verbindungsfehler."; }
+            } catch (e) { 
+                errDiv.innerText = "Verbindungsfehler."; 
+            }
         }
 
         async function handleLogin() {
             const user = document.getElementById('login-username').value.trim();
             const pass = document.getElementById('login-password').value;
             const errDiv = document.getElementById('auth-error');
+            errDiv.innerText = '';
             if(!user || !pass) { errDiv.innerText = "Bitte fülle alle Felder aus."; return; }
             try {
                 const res = await fetch('/auth/login', {
@@ -281,8 +319,6 @@
         }
 
         async function initGameData() {
-            updateFavCount(); 
-            updatePlayedCount();
             if (!userPreferences) { await loadOnboardingPool(); return; }
             await loadMainData();
             switchTab(localStorage.getItem('igdb_active_tab') || 'top10');
@@ -480,10 +516,8 @@
 
         function openRandomGame() { const list = allGames.length ? allGames : top10Games; openGameDetail(list[Math.floor(Math.random() * list.length)].id); }
 
-        function toggleFavorite(e, id) { e.stopPropagation(); favorites.includes(id) ? favorites.splice(favorites.indexOf(id), 1) : favorites.push(id); localStorage.setItem('igdb_favorites', JSON.stringify(favorites)); updateFavCount(); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
-        function togglePlayed(e, id) { e.stopPropagation(); played.includes(id) ? played.splice(played.indexOf(id), 1) : played.push(id); localStorage.setItem('igdb_played', JSON.stringify(played)); updatePlayedCount(); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
-        function updateFavCount() { document.getElementById('favCount').textContent = favorites.length; }
-        function updatePlayedCount() { document.getElementById('playedCount').textContent = played.length; }
+        function toggleFavorite(e, id) { e.stopPropagation(); favorites.includes(id) ? favorites.splice(favorites.indexOf(id), 1) : favorites.push(id); localStorage.setItem('igdb_favorites', JSON.stringify(favorites)); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
+        function togglePlayed(e, id) { e.stopPropagation(); played.includes(id) ? played.splice(played.indexOf(id), 1) : played.push(id); localStorage.setItem('igdb_played', JSON.stringify(played)); if (currentGameDetail?.id === id) openGameDetail(id); else switchTab(previousView); }
 
         async function displayFavorites() {
             let favGames = favorites.map(id => gameCache[id]).filter(g => g);
@@ -509,3 +543,150 @@
                 } catch(e){}
             }
             displayGames(playedGames, 'played-list');
+        }
+
+        async function openGameDetail(gameId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('viewDetail').classList.add('active');
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails & Steam-Erfolge...</div>';
+
+            try {
+                const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category; where id = ${gameId};` }) });
+                const data = await res.json(); 
+                if (!Array.isArray(data) || data.length === 0) throw new Error('Spiel nicht gefunden');
+                currentGameDetail = data[0]; 
+                cacheGame(currentGameDetail);
+
+                let viewerData = { viewers: 0, streams: 0 };
+                try { 
+                    const tRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'twitch_viewers', gameName: currentGameDetail.name }) }); 
+                    viewerData = await tRes.json(); 
+                } catch (e) {}
+
+                let steamAppId = null;
+                if (currentGameDetail.websites) {
+                    const steamSite = currentGameDetail.websites.find(w => w.category === 13);
+                    if (steamSite && steamSite.url) {
+                        const match = steamSite.url.match(/\/app\/([0-9]+)/);
+                        if (match) steamAppId = match[1];
+                    }
+                }
+
+                let steamAchievements = [];
+                if (steamAppId && currentUser && currentUser.steamId) {
+                    try {
+                        const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${steamAppId}`);
+                        const achData = await achRes.json();
+                        if (achData && achData.achievements) steamAchievements = achData.achievements;
+                    } catch (e) {}
+                }
+
+                renderDetailView(currentGameDetail, viewerData, steamAchievements, steamAppId);
+            } catch (e) {
+                document.getElementById('detail-content').innerHTML = '<div class="error-msg">Fehler beim Laden der Spieldetails.</div>';
+            }
+        }
+
+        async function openSteamGameDetail(appid, encodedName) {
+            const gameName = decodeURIComponent(encodedName);
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('viewDetail').classList.add('active');
+            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Steam-Erfolge...</div>';
+
+            let steamAchievements = [];
+            if (currentUser && currentUser.steamId) {
+                try {
+                    const achRes = await fetch(`/api/achievements?steamid=${currentUser.steamId}&appid=${appid}`);
+                    const achData = await achRes.json();
+                    if (achData && achData.achievements) steamAchievements = achData.achievements;
+                } catch (e) {}
+            }
+
+            let fakeGame = { name: gameName, summary: 'Spiel direkt aus deiner Steam-Bibliothek.', genres: [], platforms: [], first_release_date: null, rating: null, cover: null, id: 'steam_' + appid };
+            renderDetailView(fakeGame, { viewers: 0, streams: 0 }, steamAchievements, appid);
+        }
+
+        function toggleSteamAchievement(gameId, apiname) {
+            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${gameId}`)) || {};
+            const current = localAchState[apiname] !== undefined ? localAchState[apiname] : false;
+            localAchState[apiname] = !current;
+            localStorage.setItem(`steam_ach_${gameId}`, JSON.stringify(localAchState));
+            
+            if (currentGameDetail && currentGameDetail.id === gameId) {
+                openGameDetail(currentGameDetail.id);
+            } else {
+                location.reload();
+            }
+        }
+
+        function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }, steamAchievements = [], steamAppId = null) {
+            const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
+            let localAchState = JSON.parse(localStorage.getItem(`steam_ach_${game.id}`)) || {};
+            
+            const totalCount = steamAchievements.length;
+            const completedCount = steamAchievements.filter(a => localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved).length;
+            const perc = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+            let achievementsHtml = '';
+            if (!currentUser || !currentUser.steamId) {
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Bitte verknüpfe oben dein Steam-Konto.</p>';
+            } else if (!steamAppId) {
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Steam AppID gefunden.</p>';
+            } else if (totalCount === 0) {
+                achievementsHtml = '<p style="color: #aaa; font-size: 13px; text-align: center; padding: 15px;">Keine Erfolge gefunden oder Profil ist privat.</p>';
+            } else {
+                achievementsHtml = steamAchievements.map(a => {
+                    const isDone = localAchState[a.apiname] !== undefined ? localAchState[a.apiname] : a.achieved;
+                    return `
+                        <div class="trophy-item ${isDone ? 'completed' : ''}">
+                            <input type="checkbox" ${isDone ? 'checked' : ''} onclick="toggleSteamAchievement('${game.id}', '${a.apiname}')">
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; font-size: 13px;">${a.name}</div>
+                                <div style="font-size: 11px; color: #aaa;">${a.description}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('detail-content').innerHTML = `
+                <div class="twitch-box">
+                    <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
+                    <div style="text-align: right;"><div style="font-size: 11px; color: #e0d0ff;">Streams</div><span>📺 ${viewerData.streams} Streams</span></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h2 style="font-size: 20px;">${game.name}</h2>
+                </div>
+
+                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
+                
+                <div class="trophy-section">
+                    <div class="trophy-header">
+                        <span>🏆 Steam Erfolge (${completedCount}/${totalCount})</span>
+                        <span>${perc}%</span>
+                    </div>
+                    <div class="trophy-progress-bar"><div class="trophy-progress-fill" style="width: ${perc}%;"></div></div>
+                    <div class="trophy-list" style="max-height: 300px; overflow-y: auto;">${achievementsHtml}</div>
+                </div>
+
+                <div class="detail-info">
+                    <p><strong>Genre:</strong> ${game.genres && game.genres.length ? game.genres.map(g => g.name).join(', ') : '-'}</p>
+                    <p><strong>Plattformen:</strong> ${game.platforms && game.platforms.length ? game.platforms.map(p => p.name).join(', ') : '-'}</p>
+                    <p><strong>Erscheinungsjahr:</strong> ${game.first_release_date ? new Date(game.first_release_date * 1000).getFullYear() : '-'}</p>
+                    <p><strong>IGDB Bewertung:</strong> ⭐ ${game.rating ? (game.rating/10).toFixed(1) : '-'} / 10</p>
+                </div>
+                ${game.summary ? `<h3 style="margin-bottom: 8px; font-size: 15px;">Über das Spiel:</h3><div class="detail-info"><p>${game.summary}</p></div>` : ''}
+            `;
+        }
+
+        function shareCurrentGame() {
+            if (!currentGameDetail) return;
+            if (navigator.share) { navigator.share({ title: currentGameDetail.name, url: window.location.href }).catch(() => {}); } 
+            else { navigator.clipboard.writeText(window.location.href); alert('Link kopiert!'); }
+        }
+
+        checkSessionOnLoad();
+    </script>
+</body>
+</html>
