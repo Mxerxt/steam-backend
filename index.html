@@ -51,7 +51,6 @@
         .game-info { flex: 1; overflow: hidden; }
         .game-title { font-size: 15px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .game-meta { font-size: 12px; color: #aaa; margin-bottom: 6px; }
-        .score-badge { background: #2ea44f; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 6px; display: inline-block; }
         .action-buttons { display: flex; flex-direction: column; gap: 4px; align-items: center; }
         .fav-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 3px; }
         .fav-btn.active { color: #ff4757; }
@@ -560,7 +559,6 @@
                     <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                         <div class="game-title">${game.name}</div>
                         <div class="game-meta">Gespielt: ${playtimeStr}</div>
-                        <span class="score-badge">Steam AppID: ${game.appid}</span>
                     </div>
                 `;
                 container.appendChild(card);
@@ -603,7 +601,6 @@
                         <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
                             <div class="game-title">${game.name}</div>
                             <div class="game-meta">Spielzeit: ${playtimeHours} Std.</div>
-                            <span class="score-badge">Steam AppID: ${game.appid}</span>
                         </div>
                     `;
                     container.appendChild(card);
