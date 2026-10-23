@@ -61,14 +61,13 @@
         .detail-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .back-btn, .share-btn { background: #333; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .share-btn { background: #2b4c7e; font-size: 13px; }
-        .detail-banner { width: 100%; height: 220px; border-radius: 8px; object-fit: cover; margin-bottom: 15px; background: #252525; }
         .detail-video { width: 100%; aspect-ratio: 16/9; border-radius: 8px; margin-bottom: 15px; background: #252525; border: none; }
         .screenshots-container { display: flex; gap: 10px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px; }
         .screenshots-container img { width: 200px; height: 112px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #252525; }
         .screenshots-container::-webkit-scrollbar { height: 6px; }
         .screenshots-container::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
-        .steam-link-btn { display: block; background: #171a21; color: #fff; text-align: center; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 15px; border: 1px solid #444; }
+        .steam-link-btn { display: block; background: #171a21; color: #fff; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px; border: 1px solid #444; }
         .steam-link-btn:hover { background: #21262d; border-color: #666; }
 
         .detail-info { background: #1e1e1e; padding: 15px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; line-height: 1.5; }
@@ -606,6 +605,9 @@
                 if (steamSite) steamUrl = steamSite.url;
             }
 
+            // Twitch Verzeichnis-Link
+            const twitchUrl = `https://www.twitch.tv/directory/game/${encodeURIComponent(game.name)}`;
+
             // Video-Trailer
             let videoHtml = '';
             if (game.videos && game.videos.length > 0) {
@@ -625,24 +627,25 @@
                 `;
             }
 
-            // Steam Button HTML
-            let steamButtonHtml = '';
-            if (steamUrl) {
-                steamButtonHtml = `<a href="${steamUrl}" target="_blank" class="steam-link-btn">🛒 Auf Steam ansehen ↗</a>`;
-            }
+            // Cover (Rot) und Steam Button (Gelb) nebeneinander oben
+            let topHeaderHtml = `
+                <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px;">
+                    ${coverUrl ? `<img src="${coverUrl}" style="width: 100px; height: 135px; border-radius: 8px; object-fit: cover; background: #252525; flex-shrink: 0;">` : ''}
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center;">
+                        <h2 style="font-size: 18px; line-height: 1.3;">${game.name}</h2>
+                        ${steamUrl ? `<a href="${steamUrl}" target="_blank" class="steam-link-btn">🛒 Auf Steam ansehen ↗</a>` : '<div style="font-size: 12px; color: #aaa;">Kein Steam-Link verfügbar</div>'}
+                    </div>
+                </div>
+            `;
 
             document.getElementById('detail-content').innerHTML = `
-                <div class="twitch-box">
-                    <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
+                ${topHeaderHtml}
+
+                <a href="${twitchUrl}" target="_blank" class="twitch-box" style="text-decoration: none; color: inherit; display: flex; justify-content: space-between; align-items: center;">
+                    <div><div style="font-size: 11px; color: #e0d0ff;">Twitch Live ↗</div><span>🔴 ${viewerData.viewers.toLocaleString()} Zuschauer</span></div>
                     <div style="text-align: right;"><div style="font-size: 11px; color: #e0d0ff;">Streams</div><span>📺 ${viewerData.streams} Streams</span></div>
-                </div>
+                </a>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h2 style="font-size: 20px;">${game.name}</h2>
-                </div>
-
-                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
-                ${steamButtonHtml}
                 ${videoHtml}
                 ${screenshotsHtml}
 
