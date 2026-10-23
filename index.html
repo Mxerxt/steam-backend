@@ -593,7 +593,7 @@
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
             const coverUrl = game.cover && game.cover.url ? 'https:' + game.cover.url.replace('t_thumb', 't_cover_big') : '';
 
-            // Video-Trailer direkt inline in der App abspielen (ohne Weiterleitung)
+            // Video-Trailer
             let videoHtml = '';
             if (game.videos && game.videos.length > 0) {
                 const videoId = game.videos[0].video_id;
@@ -622,9 +622,9 @@
                     <h2 style="font-size: 20px;">${game.name}</h2>
                 </div>
 
+                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
                 ${videoHtml}
                 ${screenshotsHtml}
-                ${coverUrl ? `<img src="${coverUrl}" class="detail-banner">` : ''}
 
                 <div class="detail-info">
                     <p><strong>Genre:</strong> ${game.genres && game.genres.length ? game.genres.map(g => g.name).join(', ') : '-'}</p>
