@@ -36,6 +36,14 @@
         .auth-card .toggle-link { color: #4da6ff; font-size: 12px; text-align: center; cursor: pointer; display: block; }
         #auth-error, #reg-error { color: #ff4757; font-size: 12px; text-align: center; margin-bottom: 10px; min-height: 15px; }
 
+        /* Modal für Datenschutz */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .modal.active { display: flex; }
+        .modal-content { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; border: 1px solid #333; line-height: 1.5; font-size: 13px; }
+        .modal-content h3 { margin-bottom: 12px; font-size: 16px; color: #4da6ff; }
+        .modal-content p { margin-bottom: 12px; color: #ccc; }
+        .close-modal-btn { background: #333; color: white; border: none; padding: 10px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
         .user-header { background: #1e1e1e; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .user-info { display: flex; flex-direction: column; gap: 5px; }
         .steam-btn { background: #171a21; border: 1px solid #666; font-size: 11px; padding: 6px 10px; border-radius: 4px; color: #fff; text-decoration: none; display: inline-block; }
@@ -124,11 +132,25 @@
             
             <div style="font-size: 11px; color: #aaa; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="reg-privacy" style="width: 16px; height: 16px; accent-color: #2ea44f; cursor: pointer;">
-                <label for="reg-privacy" style="cursor: pointer;">Ich akzeptiere die Datenschutzrichtlinie</label>
+                <label for="reg-privacy" style="cursor: pointer;">
+                    Ich akzeptiere die <span style="color: #4da6ff; text-decoration: underline;" onclick="openPrivacyModal(event)">Datenschutzrichtlinie</span>
+                </label>
             </div>
 
             <button onclick="handleRegister()">Account erstellen</button>
             <span class="toggle-link" onclick="toggleAuthMode()">Bereits registriert? Einloggen</span>
+        </div>
+    </div>
+
+    <!-- Datenschutz Modal Popup -->
+    <div id="privacyModal" class="modal">
+        <div class="modal-content">
+            <h3>Datenschutzerklärung</h3>
+            <p><strong>1. Datenschutz auf einen Blick</strong><br>Wir nehmen den Schutz deiner persönlichen Daten sehr ernst. Deine Daten werden vertraulich und entsprechend den gesetzlichen Vorschriften behandelt.</p>
+            <p><strong>2. Erhebung von Daten</strong><br>Bei der Registrierung speichern wir deinen Benutzernamen, deine E-Mail-Adresse, dein Geburtsdatum sowie dein verschlüsseltes Passwort zum Zwecke der Kontoerstellung und Authentifizierung.</p>
+            <p><strong>3. Lokale Speicherung</strong><br>Diese App verwendet den LocalStorage deines Browsers, um deine Favoriten, gespielte Spiele und Einstellungen lokal zu sichern.</p>
+            <p><strong>4. Steam-Integration</strong><br>Falls du freiwillig dein Steam-Konto verknüpfst, werden öffentliche Spieldaten und Spielzeiten abgerufen, um diese in deinem Profil darzustellen.</p>
+            <button class="close-modal-btn" onclick="closePrivacyModal()">Schließen</button>
         </div>
     </div>
 
@@ -218,6 +240,15 @@
                 loginCard.style.display = 'none';
                 regCard.style.display = 'block';
             }
+        }
+
+        function openPrivacyModal(e) {
+            e.preventDefault();
+            document.getElementById('privacyModal').classList.add('active');
+        }
+
+        function closePrivacyModal() {
+            document.getElementById('privacyModal').classList.remove('active');
         }
 
         async function handleRegister() {
@@ -606,9 +637,7 @@
                     
                     dropdown.innerHTML = '';
                     
-                    // Wenn keine Ergebnisse, prüfen ob wir einen Tippfehler vermuten ("Meinten Sie...?")
                     if (!Array.isArray(results) || results.length === 0) {
-                        // Einfache intelligente Korrektur-Vorschläge für häufige Vertipper
                         let suggestion = '';
                         const qLower = query.toLowerCase();
                         if (qLower.includes('eldn') || qLower.includes('elnd') || qLower.includes('edlen')) suggestion = 'Elden Ring';
@@ -656,10 +685,9 @@
                 } catch (e) {
                     dropdown.classList.remove('active');
                 }
-            }, 250); // Debounce von 250ms für jeden getippten Buchstaben
+            }, 250);
         }
 
-        // Schließe das Dropdown bei Klick außerhalb
         document.addEventListener('click', (e) => {
             const container = document.querySelector('.universal-search-container');
             if (container && !container.contains(e.target)) {
