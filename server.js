@@ -94,6 +94,13 @@ app.post('/auth/register', async (req, res) => {
     if (password !== confirmPassword) {
         return res.status(400).json({ error: 'Die Passwörter stimmen nicht überein.' });
     }
+    
+    // Passwort-Regel: Mindestens 8 Zeichen, mind. 1 Zahl, mind. 1 Sonderzeichen
+    const passwordRegex = /^(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+        return res.status(400).json({ error: 'Das Passwort muss mindestens 8 Zeichen lang sein und jeweils mindestens eine Zahl und ein Sonderzeichen enthalten.' });
+    }
+
     if (!privacy) {
         return res.status(400).json({ error: 'Du musst den Datenschutzrichtlinien zustimmen.' });
     }
