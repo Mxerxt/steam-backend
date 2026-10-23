@@ -27,7 +27,9 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
+        email TEXT UNIQUE,
         password TEXT,
+        birthdate TEXT,
         steam_id TEXT,
         steam_name TEXT,
         favorites TEXT,
@@ -81,39 +83,57 @@ if (STEAM_API_KEY) {
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// --- Authentifizierungs-Routen ---
+// --- Authentifizierungs-Routen mit Doppelter-Prüfung (Benutzername & E-Mail) ---
 
 app.post('/auth/register', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort erforderlich.' });
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, hashedPassword], function(err) {
-            if (err) {
-                if (err.message.includes('UNIQUE constraint failed')) {
-                    return res.status(400).json({ error: 'Benutzername existiert bereits.' });
-                }
-                return res.status(500).json({ error: 'Fehler bei der Registrierung.' });
-            }
-            req.session.localUserId = this.lastID;
-            res.json({ success: true, userId: this.lastID, username: username });
-        });
-    } catch (e) {
-        res.status(500).json({ error: 'Serverfehler.' });
+    const { username, email, password, birthdate } = req.body;
+    if (!username || !email || !password || !birthdate) {
+        return res.status(400).json({ error: 'Bitte fülle alle Pflichtfelder aus.' });
     }
+
+    // Prüfen, ob Benutzername oder E-Mail bereits existieren
+    db.get(`SELECT username, email FROM users WHERE username = ? OR email = ?`, [username, email], async (err, existingUser) => {
+        if (err) return res.status(500).json({ error: 'Datenbankfehler.' });
+        
+        if (existingUser) {
+            if (existingUser.username.toLowerCase() === username.toLowerCase()) {
+                return res.status(400).json({ error: 'Dieser Benutzername ist bereits vergeben.' });
+            }
+            if (existingUser.email.toLowerCase() === email.toLowerCase()) {
+                return res.status(400).json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' });
+            }
+        }
+
+        try {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            db.run(`INSERT INTO users (username, email, password, birthdate) VALUES (?, ?, ?, ?)`, 
+                [username, email, hashedPassword, birthdate], function(err) {
+                if (err) {
+                    if (err.message.includes('UNIQUE constraint failed')) {
+                        return res.status(400).json({ error: 'Benutzername oder E-Mail existiert bereits.' });
+                    }
+                    return res.status(500).json({ error: 'Fehler bei der Registrierung.' });
+                }
+                req.session.localUserId = this.lastID;
+                res.json({ success: true, userId: this.lastID, username: username });
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Serverfehler.' });
+        }
+    });
 });
 
 app.post('/auth/login', (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort erforderlich.' });
+    if (!username || !password) return res.status(400).json({ error: 'Bitte fülle alle Felder aus.' });
 
-    db.get(`SELECT * FROM users WHERE username = ? OR username = ?`, [username, username], async (err, user) => {
+    // Login mit Benutzernamen oder E-Mail möglich
+    db.get(`SELECT * FROM users WHERE username = ? OR email = ?`, [username, username], async (err, user) => {
         if (err) return res.status(500).json({ error: 'Datenbankfehler.' });
         if (!user) return res.status(401).json({ error: 'Benutzer nicht gefunden.' });
 
         const match = await bcrypt.compare(password, user.password);
-        if (!match) return res.status(401).json({ error: 'Falsches Passwort.' });
+        if (!match) return res.status(401).json({ error: 'Falsches Kennwort.' });
 
         req.session.localUserId = user.id;
         res.json({ 
