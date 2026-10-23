@@ -194,17 +194,9 @@
         <div id="viewTop10" class="view"><div id="top10-list"><div class="loading-spinner">Lade...</div></div></div>
         <div id="viewFavorites" class="view"><div id="favorites-list"><div class="loading-spinner">Lade...</div></div></div>
         
-        <!-- Gespielt Reiter mit Sortierung -->
+        <!-- Gespielt Reiter -->
         <div id="viewPlayed" class="view">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span style="font-size: 13px; color: #aaa;">Sortieren nach:</span>
-                <select id="playedSortSelect" onchange="sortAndDisplayPlayed()" style="background: #1e1e1e; color: #fff; border: 1px solid #444; padding: 6px 10px; border-radius: 6px; outline: none; font-size: 12px; cursor: pointer;">
-                    <option value="playtime_desc">Spielzeit (Meiste zuerst)</option>
-                    <option value="playtime_asc">Spielzeit (Kürzeste zuerst)</option>
-                    <option value="az">A - Z (Alphabetisch)</option>
-                    <option value="za">Z - A (Alphabetisch)</option>
-                </select>
-            </div>
+            <h3 style="font-size: 16px; margin-bottom: 12px; color: #4da6ff;">🕹️ Gespielte Spiele</h3>
             <div id="played-list"><div class="loading-spinner">Lade...</div></div>
         </div>
 
@@ -219,7 +211,7 @@
 
     <script>
         let currentUser = null;
-        let allGames = [], top10Games = [], steamLibraryGames = [], currentPlayedGames = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
+        let allGames = [], top10Games = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
         let favorites = [];
         let played = [];
         let userPreferences = null;
@@ -393,7 +385,6 @@
             initGameData();
         }
 
-        // --- Server-Synchronisation für Favoriten & Einstellungen ---
         async function loadUserDataFromServer() {
             try {
                 const res = await fetch('/api/user/data');
@@ -404,7 +395,6 @@
                     userPreferences = data.preferences || null;
                 }
             } catch (e) {
-                // Fallback auf LocalStorage falls Server nicht erreichbar
                 favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
                 played = JSON.parse(localStorage.getItem('igdb_played')) || [];
                 userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
@@ -509,7 +499,10 @@
                 if(Array.isArray(catData)) { 
                     allGames = catData; 
                     cacheGames(allGames); 
-                    displayGames(allGames, 'game-list'); 
+                    
+                    // Im Katalog nur Spiele anzeigen, die NICHT favorisiert sind
+                    const catalogFiltered = allGames.filter(g => !favorites.includes(g.id));
+                    displayGames(catalogFiltered, 'game-list'); 
                 } else {
                     document.getElementById('game-list').innerHTML = '<div class="error-msg">IGDB-Fehler: Bitte prüfe Twitch Client-ID / Secret auf Render.</div>';
                 }
@@ -561,85 +554,16 @@
         }
 
         async function displayPlayed() {
-            const container = document.getElementById('played-list');
-            if (!currentUser || !currentUser.steamId) {
-                container.innerHTML = '<div class="error-msg">Bitte verknüpfe zuerst oben dein Steam-Konto, um deine gespielten Spiele und Spielzeiten zu sehen.</div>';
-                return;
-            }
-
-            if (steamLibraryGames.length === 0) {
-                container.innerHTML = '<div class="loading-spinner">Lade gespielte Spiele...</div>';
+            let playedGames = played.map(id => gameCache[id]).filter(g => g);
+            const missing = played.filter(id => !gameCache[id]);
+            if (missing.length > 0) {
                 try {
-                    const res = await fetch(`/api/owned-games?steamid=${currentUser.steamId}`);
-                    const data = await res.json();
-                    if (data.response && data.response.games) {
-                        steamLibraryGames = data.response.games;
-                    }
-                } catch (e) {
-                    container.innerHTML = '<div class="error-msg">Fehler beim Laden der Steam-Spiele.</div>';
-                    return;
-                }
+                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where id = (${missing.join(',')});` }) });
+                    const fetched = await res.json(); 
+                    if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => playedGames.push(g)); }
+                } catch(e){}
             }
-
-            currentPlayedGames = [...steamLibraryGames];
-            sortAndDisplayPlayed();
-        }
-
-        function sortAndDisplayPlayed() {
-            const container = document.getElementById('played-list');
-            const sortVal = document.getElementById('playedSortSelect') ? document.getElementById('playedSortSelect').value : 'playtime_desc';
-
-            if (!currentPlayedGames || currentPlayedGames.length === 0) {
-                container.innerHTML = '<div class="error-msg">Keine gespielten Spiele gefunden.</div>';
-                return;
-            }
-
-            currentPlayedGames.sort((a, b) => {
-                const timeA = a.playtime_forever || 0;
-                const timeB = b.playtime_forever || 0;
-                const nameA = (a.name || '').toLowerCase();
-                const nameB = (b.name || '').toLowerCase();
-
-                if (sortVal === 'playtime_desc') {
-                    return timeB - timeA;
-                } else if (sortVal === 'playtime_asc') {
-                    return timeA - timeB;
-                } else if (sortVal === 'az') {
-                    return nameA.localeCompare(nameB);
-                } else if (sortVal === 'za') {
-                    return nameB.localeCompare(nameA);
-                }
-                return 0;
-            });
-
-            container.innerHTML = '';
-            currentPlayedGames.forEach(game => {
-                const highResUrl = game.appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/library_600x900.jpg` : 'https://via.placeholder.com/70x90';
-                
-                const totalMinutes = game.playtime_forever || 0;
-                const hours = Math.floor(totalMinutes / 60);
-                const mins = totalMinutes % 60;
-                
-                let playtimeStr = '';
-                if (hours > 0 && mins > 0) {
-                    playtimeStr = `${hours} Std. ${mins} Min.`;
-                } else if (hours > 0) {
-                    playtimeStr = `${hours} Std.`;
-                } else {
-                    playtimeStr = `${mins} Min.`;
-                }
-
-                const card = document.createElement('div');
-                card.className = 'game-card';
-                card.innerHTML = `
-                    <img src="${highResUrl}" onerror="this.src='https://via.placeholder.com/70x90?text=No+Img'" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
-                    <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
-                        <div class="game-title">${game.name}</div>
-                        <div class="game-meta">Gespielt: ${playtimeStr}</div>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
+            displayGames(playedGames, 'played-list');
         }
 
         // --- Universelle Live-Suche mit "Meinten Sie...?" ---
@@ -787,68 +711,14 @@
             }
         }
 
-        async function openSteamGameDetail(appid, encodedName) {
-            const gameName = decodeURIComponent(encodedName);
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById('viewDetail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = '<div class="loading-spinner">Lade Spieldetails & Medien von IGDB...</div>';
-
-            let gameData = null;
-            try {
-                const res = await fetch('/api/igdb', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ query: `search "${gameName}"; fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; limit 1;` }) 
-                });
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    gameData = data[0];
-                }
-            } catch (e) {}
-
-            if (!gameData) {
-                gameData = { 
-                    name: gameName, 
-                    summary: 'Spiel direkt aus deiner Steam-Bibliothek.', 
-                    genres: [], 
-                    platforms: [{name: 'PC (Microsoft Windows)'}], 
-                    first_release_date: null, 
-                    rating: null, 
-                    cover: null, 
-                    screenshots: [], 
-                    videos: [], 
-                    id: 'steam_' + appid 
-                };
-            }
-
-            gameData.steamAppId = appid;
-            cacheGame(gameData);
-
-            let viewerData = { viewers: 0, streams: 0 };
-            try { 
-                const tRes = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'twitch_viewers', gameName: gameData.name }) }); 
-                viewerData = await tRes.json(); 
-            } catch (e) {}
-
-            currentGameDetail = gameData;
-            renderDetailView(currentGameDetail, viewerData);
-        }
-
         function renderDetailView(game, viewerData = { viewers: 0, streams: 0 }) {
             let coverUrl = '';
-            if (game.steamAppId) {
-                coverUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.steamAppId}/library_600x900.jpg`;
-            } else if (game.cover && game.cover.url) {
+            if (game.cover && game.cover.url) {
                 coverUrl = 'https:' + game.cover.url.replace('t_thumb', 't_cover_big');
             }
 
             let steamUrl = '';
-            if (game.steamAppId) {
-                steamUrl = `https://store.steampowered.com/app/${game.steamAppId}`;
-            } else if (game.id && String(game.id).startsWith('steam_')) {
-                const appid = String(game.id).replace('steam_', '');
-                steamUrl = `https://store.steampowered.com/app/${appid}`;
-            } else if (game.websites) {
+            if (game.websites) {
                 const steamSite = game.websites.find(w => w.category === 13 || (w.url && w.url.includes('store.steampowered.com')));
                 if (steamSite) steamUrl = steamSite.url;
             }
