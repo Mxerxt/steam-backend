@@ -79,7 +79,7 @@ app.post('/api/igdb', async (req, res) => {
         let bodyData = {};
         if (typeof req.body === 'string') {
             try { bodyData = JSON.parse(req.body); } catch (e) { bodyData = { query: req.body }; }
-        } else { bodyData = bodyData.body || {}; }
+        } else { bodyData = req.body || {}; }
 
         if (bodyData.action === 'twitch_viewers') {
             const gameName = bodyData.gameName;
