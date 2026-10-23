@@ -1,7 +1,7 @@
 {
   "name": "steam-backend",
   "version": "1.0.0",
-  "description": "Backend für Steam Login und Trophäen",
+  "description": "Backend für Steam Login, IGDB und Benutzerkonten",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,8 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "passport": "^0.7.0",
-    "passport-steam": "^1.0.1"
+    "passport-steam": "^1.0.1",
+    "sqlite3": "^5.1.7",
+    "bcrypt": "^5.1.1"
   }
 }
