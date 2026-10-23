@@ -148,7 +148,7 @@
             <h3>Datenschutzerklärung</h3>
             <p><strong>1. Datenschutz auf einen Blick</strong><br>Wir nehmen den Schutz deiner persönlichen Daten sehr ernst. Deine Daten werden vertraulich und entsprechend den gesetzlichen Vorschriften behandelt.</p>
             <p><strong>2. Erhebung von Daten</strong><br>Bei der Registrierung speichern wir deinen Benutzernamen, deine E-Mail-Adresse, dein Geburtsdatum sowie dein verschlüsseltes Passwort zum Zwecke der Kontoerstellung und Authentifizierung.</p>
-            <p><strong>3. Lokale Speicherung</strong><br>Diese App verwendet den LocalStorage deines Browsers, um deine Favoriten, gespielte Spiele und Einstellungen lokal zu sichern.</p>
+            <p><strong>3. Datenspeicherung in der Cloud</strong><br>Deine Favoriten, Markierungen und Einstellungen werden sicher in der Benutzerdatenbank gespeichert, damit du von jedem Gerät aus darauf zugreifen kannst.</p>
             <p><strong>4. Steam-Integration</strong><br>Falls du freiwillig dein Steam-Konto verknüpfst, werden öffentliche Spieldaten und Spielzeiten abgerufen, um diese in deinem Profil darzustellen.</p>
             <button class="close-modal-btn" onclick="closePrivacyModal()">Schließen</button>
         </div>
@@ -220,9 +220,9 @@
     <script>
         let currentUser = null;
         let allGames = [], top10Games = [], steamLibraryGames = [], currentPlayedGames = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
-        let favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
-        let played = JSON.parse(localStorage.getItem('igdb_played')) || [];
-        let userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
+        let favorites = [];
+        let played = [];
+        let userPreferences = null;
         let gameCache = JSON.parse(localStorage.getItem('igdb_game_cache')) || {};
         let previousView = 'top10';
         let currentGameDetail = null;
@@ -385,11 +385,40 @@
             `;
         }
 
-        function startApp() {
+        async function startApp() {
             document.getElementById('auth-overlay').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
             updateHeaderUI();
+            await loadUserDataFromServer();
             initGameData();
+        }
+
+        // --- Server-Synchronisation für Favoriten & Einstellungen ---
+        async function loadUserDataFromServer() {
+            try {
+                const res = await fetch('/api/user/data');
+                const data = await res.json();
+                if (data && !data.error) {
+                    favorites = data.favorites || [];
+                    played = data.played || [];
+                    userPreferences = data.preferences || null;
+                }
+            } catch (e) {
+                // Fallback auf LocalStorage falls Server nicht erreichbar
+                favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
+                played = JSON.parse(localStorage.getItem('igdb_played')) || [];
+                userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
+            }
+        }
+
+        async function saveUserDataToServer() {
+            try {
+                await fetch('/api/user/data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ favorites, played, preferences: userPreferences })
+                });
+            } catch (e) {}
         }
 
         async function initGameData() {
@@ -453,9 +482,9 @@
             const chosen = allPopularGames.filter(g => selectedOnboardIds.includes(g.id));
             let genreIds = []; chosen.forEach(g => { if (g.genres) genreIds = genreIds.concat(g.genres); });
             userPreferences = { gameIds: selectedOnboardIds, genreIds: [...new Set(genreIds)] };
-            localStorage.setItem('igdb_user_preferences', JSON.stringify(userPreferences));
             selectedOnboardIds.forEach(id => { if (!favorites.includes(id)) favorites.push(id); });
-            localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
+            
+            await saveUserDataToServer();
             document.getElementById('viewOnboarding').classList.remove('active');
             await loadMainData(); switchTab('top10');
         }
@@ -697,7 +726,7 @@
 
         function openRandomGame() { const list = allGames.length ? allGames : top10Games; openGameDetail(list[Math.floor(Math.random() * list.length)].id); }
 
-        function toggleFavorite(e, id) {
+        async function toggleFavorite(e, id) {
             e.stopPropagation();
             const index = favorites.indexOf(id);
             if (index > -1) {
@@ -705,11 +734,11 @@
             } else {
                 favorites.push(id);
             }
-            localStorage.setItem('igdb_favorites', JSON.stringify(favorites));
+            await saveUserDataToServer();
             location.reload();
         }
 
-        function togglePlayed(e, id) {
+        async function togglePlayed(e, id) {
             e.stopPropagation();
             const index = played.indexOf(id);
             if (index > -1) {
@@ -717,7 +746,7 @@
             } else {
                 played.push(id);
             }
-            localStorage.setItem('igdb_played', JSON.stringify(played));
+            await saveUserDataToServer();
             location.reload();
         }
 
