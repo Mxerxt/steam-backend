@@ -151,7 +151,20 @@
 
         <div id="viewTop10" class="view"><div id="top10-list"><div class="loading-spinner">Lade...</div></div></div>
         <div id="viewFavorites" class="view"><div id="favorites-list"><div class="loading-spinner">Lade...</div></div></div>
-        <div id="viewPlayed" class="view"><div id="played-list"><div class="loading-spinner">Lade...</div></div></div>
+        
+        <!-- Gespielt Reiter mit Sortierung -->
+        <div id="viewPlayed" class="view">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 13px; color: #aaa;">Sortieren nach:</span>
+                <select id="playedSortSelect" onchange="sortAndDisplayPlayed()" style="background: #1e1e1e; color: #fff; border: 1px solid #444; padding: 6px 10px; border-radius: 6px; outline: none; font-size: 12px; cursor: pointer;">
+                    <option value="playtime_desc">Spielzeit (Meiste zuerst)</option>
+                    <option value="playtime_asc">Spielzeit (Kürzeste zuerst)</option>
+                    <option value="az">A - Z (Alphabetisch)</option>
+                    <option value="za">Z - A (Alphabetisch)</option>
+                </select>
+            </div>
+            <div id="played-list"><div class="loading-spinner">Lade...</div></div>
+        </div>
         
         <div id="viewSteamLib" class="view">
             <div id="steam-lib-list"><div class="loading-spinner">Lade Steam-Spiele...</div></div>
@@ -168,7 +181,7 @@
 
     <script>
         let currentUser = null;
-        let allGames = [], top10Games = [], steamLibraryGames = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
+        let allGames = [], top10Games = [], steamLibraryGames = [], currentPlayedGames = [], allPopularGames = [], currentOnboardingView = [], selectedOnboardIds = [];
         let favorites = JSON.parse(localStorage.getItem('igdb_favorites')) || [];
         let played = JSON.parse(localStorage.getItem('igdb_played')) || [];
         let userPreferences = JSON.parse(localStorage.getItem('igdb_user_preferences')) || null;
@@ -471,6 +484,90 @@
             });
         }
 
+        async function displayPlayed() {
+            const container = document.getElementById('played-list');
+            if (!currentUser || !currentUser.steamId) {
+                container.innerHTML = '<div class="error-msg">Bitte verknüpfe zuerst oben dein Steam-Konto, um deine gespielten Spiele und Spielzeiten zu sehen.</div>';
+                return;
+            }
+
+            if (steamLibraryGames.length === 0) {
+                container.innerHTML = '<div class="loading-spinner">Lade gespielte Spiele...</div>';
+                try {
+                    const res = await fetch(`/api/owned-games?steamid=${currentUser.steamId}`);
+                    const data = await res.json();
+                    if (data.response && data.response.games) {
+                        steamLibraryGames = data.response.games;
+                    }
+                } catch (e) {
+                    container.innerHTML = '<div class="error-msg">Fehler beim Laden der Steam-Spiele.</div>';
+                    return;
+                }
+            }
+
+            currentPlayedGames = [...steamLibraryGames];
+            sortAndDisplayPlayed();
+        }
+
+        function sortAndDisplayPlayed() {
+            const container = document.getElementById('played-list');
+            const sortVal = document.getElementById('playedSortSelect') ? document.getElementById('playedSortSelect').value : 'playtime_desc';
+
+            if (!currentPlayedGames || currentPlayedGames.length === 0) {
+                container.innerHTML = '<div class="error-msg">Keine gespielten Spiele gefunden.</div>';
+                return;
+            }
+
+            // Sortieren nach Auswahl
+            currentPlayedGames.sort((a, b) => {
+                const timeA = a.playtime_forever || 0;
+                const timeB = b.playtime_forever || 0;
+                const nameA = (a.name || '').toLowerCase();
+                const nameB = (b.name || '').toLowerCase();
+
+                if (sortVal === 'playtime_desc') {
+                    return timeB - timeA;
+                } else if (sortVal === 'playtime_asc') {
+                    return timeA - timeB;
+                } else if (sortVal === 'az') {
+                    return nameA.localeCompare(nameB);
+                } else if (sortVal === 'za') {
+                    return nameB.localeCompare(nameA);
+                }
+                return 0;
+            });
+
+            container.innerHTML = '';
+            currentPlayedGames.forEach(game => {
+                const iconUrl = game.img_icon_url ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg` : 'https://via.placeholder.com/70x90';
+                
+                const totalMinutes = game.playtime_forever || 0;
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = totalMinutes % 60;
+                
+                let playtimeStr = '';
+                if (hours > 0 && mins > 0) {
+                    playtimeStr = `${hours} Std. ${mins} Min.`;
+                } else if (hours > 0) {
+                    playtimeStr = `${hours} Std.`;
+                } else {
+                    playtimeStr = `${mins} Min.`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'game-card';
+                card.innerHTML = `
+                    <img src="${iconUrl}" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                    <div class="game-info" onclick="openSteamGameDetail(${game.appid}, '${encodeURIComponent(game.name)}')">
+                        <div class="game-title">${game.name}</div>
+                        <div class="game-meta">Gespielt: ${playtimeStr}</div>
+                        <span class="score-badge">Steam AppID: ${game.appid}</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
         async function displaySteamLibrary() {
             const container = document.getElementById('steam-lib-list');
             if (!currentUser || !currentUser.steamId) {
@@ -543,19 +640,6 @@
                 } catch(e){}
             }
             displayGames(favGames, 'favorites-list');
-        }
-
-        async function displayPlayed() {
-            let playedGames = played.map(id => gameCache[id]).filter(g => g);
-            const missing = played.filter(id => !gameCache[id]);
-            if (missing.length > 0) {
-                try {
-                    const res = await fetch('/api/igdb', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: `fields name, summary, cover.url, rating, genres.name, platforms.name, first_release_date, websites.url, websites.category, screenshots.image_id, videos.video_id; where id = (${missing.join(',')});` }) });
-                    const fetched = await res.json(); 
-                    if(Array.isArray(fetched)) { cacheGames(fetched); fetched.forEach(g => playedGames.push(g)); }
-                } catch(e){}
-            }
-            displayGames(playedGames, 'played-list');
         }
 
         async function openGameDetail(gameId) {
