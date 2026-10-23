@@ -17,7 +17,7 @@ const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
 const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || '';
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || '';
 
-// --- DATENBANK SETUP ---
+// SQLite Datenbank initialisieren
 const db = new sqlite3.Database('./database.sqlite', (err) => {
     if (err) console.error('Fehler beim Öffnen der Datenbank:', err.message);
     else console.log('Verbunden mit der SQLite-Datenbank.');
@@ -27,15 +27,15 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
-        email TEXT UNIQUE,
         password TEXT,
-        birthdate TEXT,
         steam_id TEXT,
-        steam_name TEXT
+        steam_name TEXT,
+        favorites TEXT,
+        played TEXT,
+        preferences TEXT
     )`);
 });
 
-// --- MIDDLEWARE ---
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: 'text/plain', limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -51,7 +51,6 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(__dirname));
 
-// --- PASSPORT (Steam) ---
 if (STEAM_API_KEY) {
     passport.use(new SteamStrategy({
         returnURL: `${HOST_URL}/auth/steam/return`,
@@ -82,58 +81,34 @@ if (STEAM_API_KEY) {
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// --- LOKALE AUTH-ROUTEN ---
+// --- Authentifizierungs-Routen ---
 
-// 1. Registrieren
 app.post('/auth/register', async (req, res) => {
-    const { username, email, password, confirmPassword, birthdate, privacy } = req.body;
-    
-    if (!username || !email || !password || !confirmPassword || !birthdate) {
-        return res.status(400).json({ error: 'Bitte fülle alle Pflichtfelder aus.' });
-    }
-    if (password !== confirmPassword) {
-        return res.status(400).json({ error: 'Die Passwörter stimmen nicht überein.' });
-    }
-    
-    // Passwort-Regel: Mindestens 8 Zeichen, mind. 1 Zahl, mind. 1 Sonderzeichen
-    const passwordRegex = /^(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
-    if (!passwordRegex.test(password)) {
-        return res.status(400).json({ error: 'Das Passwort muss mindestens 8 Zeichen lang sein und jeweils mindestens eine Zahl und ein Sonderzeichen enthalten.' });
-    }
-
-    if (!privacy) {
-        return res.status(400).json({ error: 'Du musst den Datenschutzrichtlinien zustimmen.' });
-    }
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort erforderlich.' });
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        db.run(`INSERT INTO users (username, email, password, birthdate) VALUES (?, ?, ?, ?)`, 
-            [username, email, hashedPassword, birthdate], 
-            function(err) {
-                if (err) {
-                    if (err.message.includes('UNIQUE constraint failed')) {
-                        if (err.message.includes('email')) {
-                            return res.status(400).json({ error: 'Diese E-Mail-Adresse wird bereits verwendet.' });
-                        }
-                        return res.status(400).json({ error: 'Benutzername existiert bereits.' });
-                    }
-                    return res.status(500).json({ error: 'Fehler bei der Registrierung.' });
+        db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, hashedPassword], function(err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: 'Benutzername existiert bereits.' });
                 }
-                req.session.localUserId = this.lastID;
-                res.json({ success: true, userId: this.lastID, username: username });
+                return res.status(500).json({ error: 'Fehler bei der Registrierung.' });
             }
-        );
+            req.session.localUserId = this.lastID;
+            res.json({ success: true, userId: this.lastID, username: username });
+        });
     } catch (e) {
         res.status(500).json({ error: 'Serverfehler.' });
     }
 });
 
-// 2. Login
 app.post('/auth/login', (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort erforderlich.' });
 
-    db.get(`SELECT * FROM users WHERE username = ? OR email = ?`, [username, username], async (err, user) => {
+    db.get(`SELECT * FROM users WHERE username = ? OR username = ?`, [username, username], async (err, user) => {
         if (err) return res.status(500).json({ error: 'Datenbankfehler.' });
         if (!user) return res.status(401).json({ error: 'Benutzer nicht gefunden.' });
 
@@ -145,7 +120,6 @@ app.post('/auth/login', (req, res) => {
             success: true, 
             userId: user.id, 
             username: user.username,
-            email: user.email,
             steamId: user.steam_id,
             steamName: user.steam_name
         });
@@ -179,7 +153,45 @@ app.get('/auth/steam/return',
     }
 );
 
-// --- API ROUTEN ---
+// --- Cloud-Datenspeicherung für Nutzer (Favoriten, Gespielt, Präferenzen) ---
+
+app.get('/api/user/data', (req, res) => {
+    if (!req.session.localUserId) {
+        return res.status(401).json({ error: 'Nicht eingeloggt' });
+    }
+
+    db.get(`SELECT favorites, played, preferences FROM users WHERE id = ?`, [req.session.localUserId], (err, row) => {
+        if (err || !row) return res.status(500).json({ error: 'Fehler beim Laden der Benutzerdaten.' });
+
+        res.json({
+            favorites: row.favorites ? JSON.parse(row.favorites) : [],
+            played: row.played ? JSON.parse(row.played) : [],
+            preferences: row.preferences ? JSON.parse(row.preferences) : null
+        });
+    });
+});
+
+app.post('/api/user/data', (req, res) => {
+    if (!req.session.localUserId) {
+        return res.status(401).json({ error: 'Nicht eingeloggt' });
+    }
+
+    const { favorites, played, preferences } = req.body;
+    const favStr = JSON.stringify(favorites || []);
+    const playedStr = JSON.stringify(played || []);
+    const prefStr = JSON.stringify(preferences || null);
+
+    db.run(`UPDATE users SET favorites = ?, played = ?, preferences = ? WHERE id = ?`, 
+        [favStr, playedStr, prefStr, req.session.localUserId], 
+        (err) => {
+            if (err) return res.status(500).json({ error: 'Fehler beim Speichern der Benutzerdaten.' });
+            res.json({ success: true });
+        }
+    );
+});
+
+// --- Steam API Routen ---
+
 app.get('/api/owned-games', async (req, res) => {
     const { steamid } = req.query;
     if (!steamid) return res.status(400).json({ error: 'steamid fehlt' });
@@ -223,6 +235,8 @@ app.get('/api/achievements', async (req, res) => {
         res.status(500).json({ error: 'Fehler beim Abrufen der Steam-Erfolge.' });
     }
 });
+
+// --- IGDB & Twitch Proxy ---
 
 app.post('/api/igdb', async (req, res) => {
     if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) return res.status(500).json({ error: 'Twitch Credentials fehlen.' });
@@ -268,4 +282,4 @@ app.post('/api/igdb', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Server laeuft auf Port ${PORT}`));
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
